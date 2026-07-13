@@ -161,9 +161,15 @@ mkdir -p "$OUTPUT_DIR/runtime"
 rm -f "$OUTPUT_DIR/runtime"/*
 
 # Step 4a: Pure-IL System.Private.CoreLib.dll (iOS/iOS Simulator: required for interpreter)
+CORECLR_PDB="$CORECLR_DIR/IL/System.Private.CoreLib.pdb"
 if [ -f "$CORECLR_IL" ]; then
     cp "$CORECLR_IL" "$OUTPUT_DIR/runtime/System.Private.CoreLib.dll"
     echo "  System.Private.CoreLib.dll (pure-IL from CoreCLR IL/)"
+    # Also copy matching pdb if available
+    if [ -f "$CORECLR_PDB" ]; then
+        cp "$CORECLR_PDB" "$OUTPUT_DIR/runtime/System.Private.CoreLib.pdb"
+        echo "  System.Private.CoreLib.pdb (from CoreCLR IL/)"
+    fi
 else
     echo "  NOTE: CoreCLR IL/ CoreLib not found, will use runtime pack version"
 fi
