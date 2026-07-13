@@ -115,11 +115,6 @@ echo ">>> Copying native libraries..."
 mkdir -p "$OUTPUT_DIR/lib"
 rm -f "$OUTPUT_DIR/lib"/*
 
-# Native files we need (exclude mono/* debugger/* hot_reload/* marshal-ilgen/*)
-# These are the CoreCLR runtime + system native shims.
-CORE_NATIVE_LIBS="libcoreclr libclrjit libclrinterpreter"
-SYSTEM_NATIVE_LIBS="libSystem.Native libSystem.IO.Compression.Native libSystem.Globalization.Native libSystem.Net.Security.Native libSystem.Security.Cryptography.Native.Apple"
-
 # Determine file extension
 case "$PLATFORM" in
     win64) NATIVE_EXT="dll" ;;
@@ -127,18 +122,26 @@ case "$PLATFORM" in
     macos|ios|iossimulator) NATIVE_EXT="dylib" ;;
 esac
 
-# Copy from runtime pack native (primary source — has everything)
-if [ -d "$RUNTIME_PACK_NATIVE" ]; then
-    # CoreCLR runtime libs
-    for lib in $CORE_NATIVE_LIBS; do
-        src="$RUNTIME_PACK_NATIVE/${lib}.${NATIVE_EXT}"
-        if [ -f "$src" ]; then
-            cp "$src" "$OUTPUT_DIR/lib/"
-            echo "  ${lib}.${NATIVE_EXT}"
-        fi
+# Source 1: CoreCLR artifacts — runtime engine dylibs (libcoreclr, libclrjit, libclrinterpreter)
+# These are NOT in the runtime pack native/ on most platforms.
+if [ -d "$CORECLR_DIR" ]; then
+    shopt -s nullglob
+    for lib in libcoreclr libclrjit libclrinterpreter; do
+        # Pick the exact-name dylib; skip cross-compiled variants (libclrjit_*.dylib etc.)
+        for src in "$CORECLR_DIR/${lib}.${NATIVE_EXT}"; do
+            if [ -f "$src" ]; then
+                cp "$src" "$OUTPUT_DIR/lib/"
+                echo "  $(basename "$src")"
+            fi
+        done
     done
-    # System native shims
-    for lib in $SYSTEM_NATIVE_LIBS; do
+    shopt -u nullglob
+fi
+
+# Source 2: Runtime pack native — system shim dylibs
+# (libSystem.Native, libSystem.Globalization.Native, etc.)
+if [ -d "$RUNTIME_PACK_NATIVE" ]; then
+    for lib in libSystem.Native libSystem.IO.Compression.Native libSystem.Globalization.Native libSystem.Net.Security.Native libSystem.Security.Cryptography.Native.Apple; do
         src="$RUNTIME_PACK_NATIVE/${lib}.${NATIVE_EXT}"
         if [ -f "$src" ]; then
             cp "$src" "$OUTPUT_DIR/lib/"
