@@ -186,6 +186,19 @@ else
     exit 1
 fi
 
+# Step 4c: Copy BCL PDBs (stack traces need them for line numbers)
+RUNTIME_PACK_PDB="$RUNTIME_PACK/lib/$DOTNET_TFM"
+PDB_COUNT=0
+for pdb in "$RUNTIME_PACK_PDB"/*.pdb; do
+    if [ -f "$pdb" ]; then
+        cp "$pdb" "$OUTPUT_DIR/runtime/"
+        PDB_COUNT=$((PDB_COUNT + 1))
+    fi
+done
+if [ $PDB_COUNT -gt 0 ]; then
+    echo "  Total: ${PDB_COUNT} BCL .pdb files"
+fi
+
 # ── Step 5: iOS-specific: build .embeddedframework.zip ────────────────────
 case "$PLATFORM" in
     ios|iossimulator)
