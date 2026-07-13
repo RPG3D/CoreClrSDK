@@ -1,0 +1,236 @@
+name: Build CoreClrSDK - All Platforms
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'Debug'
+        type: choice
+        options:
+          - Debug
+          - Release
+      build_win64:
+        description: 'Build Windows x64'
+        required: false
+        type: boolean
+        default: true
+      build_linux:
+        description: 'Build Linux x64'
+        required: false
+        type: boolean
+        default: true
+      build_macos:
+        description: 'Build macOS arm64'
+        required: false
+        type: boolean
+        default: true
+      build_android:
+        description: 'Build Android arm64'
+        required: false
+        type: boolean
+        default: true
+      build_ios:
+        description: 'Build iOS arm64'
+        required: false
+        type: boolean
+        default: true
+      build_iossimulator:
+        description: 'Build iOS Simulator arm64'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Windows x64 ──────────────────────────────────────────────────────────
+  build-win64:
+    runs-on: windows-2022
+    if: github.event.inputs.build_win64 == 'true'
+    steps:
+      - name: Checkout CoreClrSDK
+        uses: actions/checkout@v4
+
+      - name: Clone dotnet/runtime
+        run: |
+          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+        shell: bash
+
+      - name: Build CoreCLR (Windows x64)
+        run: |
+          cd dotnet-runtime
+          ./build.cmd clr.native+clr.corelib -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+        shell: cmd
+
+      - name: Copy artifacts to SDK
+        run: |
+          bash BuildCoreClrSDK.sh $(pwd)/dotnet-runtime win64 ${{ github.event.inputs.build_type || 'Debug' }}
+        shell: bash
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreClrSDK-Win64-${{ github.event.inputs.build_type || 'Debug' }}
+          path: win64/
+          retention-days: 30
+          if-no-files-found: error
+
+  # ── Linux x64 ────────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.build_linux == 'true'
+    steps:
+      - name: Checkout CoreClrSDK
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libicu-dev libssl-dev libkrb5-dev
+
+      - name: Clone dotnet/runtime
+        run: |
+          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+
+      - name: Build CoreCLR (Linux x64)
+        run: |
+          cd dotnet-runtime
+          ./build.sh clr.native+clr.corelib -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Copy artifacts to SDK
+        run: |
+          bash BuildCoreClrSDK.sh $(pwd)/dotnet-runtime linux ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreClrSDK-Linux-x64-${{ github.event.inputs.build_type || 'Debug' }}
+          path: linux/
+          retention-days: 30
+          if-no-files-found: error
+
+  # ── macOS arm64 ──────────────────────────────────────────────────────────
+  build-macos:
+    runs-on: macos-26
+    if: github.event.inputs.build_macos == 'true'
+    steps:
+      - name: Checkout CoreClrSDK
+        uses: actions/checkout@v4
+
+      - name: Clone dotnet/runtime
+        run: |
+          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+
+      - name: Build CoreCLR (macOS arm64)
+        run: |
+          cd dotnet-runtime
+          ./build.sh clr.native+clr.corelib -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Copy artifacts to SDK
+        run: |
+          bash BuildCoreClrSDK.sh $(pwd)/dotnet-runtime macos ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreClrSDK-macOS-arm64-${{ github.event.inputs.build_type || 'Debug' }}
+          path: macos/
+          retention-days: 30
+          if-no-files-found: error
+
+  # ── Android arm64 ────────────────────────────────────────────────────────
+  build-android:
+    runs-on: macos-26
+    if: github.event.inputs.build_android == 'true'
+    steps:
+      - name: Checkout CoreClrSDK
+        uses: actions/checkout@v4
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Clone dotnet/runtime
+        run: |
+          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+
+      - name: Build CoreCLR (Android arm64)
+        run: |
+          cd dotnet-runtime
+          ./build.sh clr.native+clr.corelib -os android -arch arm64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Copy artifacts to SDK
+        run: |
+          bash BuildCoreClrSDK.sh $(pwd)/dotnet-runtime android ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreClrSDK-Android-arm64-${{ github.event.inputs.build_type || 'Debug' }}
+          path: android/
+          retention-days: 30
+          if-no-files-found: error
+
+  # ── iOS arm64 (Device) ──────────────────────────────────────────────────
+  build-ios:
+    runs-on: macos-26
+    if: github.event.inputs.build_ios == 'true'
+    steps:
+      - name: Checkout CoreClrSDK
+        uses: actions/checkout@v4
+
+      - name: Clone dotnet/runtime
+        run: |
+          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+
+      - name: Build CoreCLR (iOS Device)
+        run: |
+          cd dotnet-runtime
+          ./build.sh clr.native+clr.corelib -os ios -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Copy artifacts to SDK (iOS)
+        run: |
+          bash BuildCoreClrSDK.sh $(pwd)/dotnet-runtime ios ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreClrSDK-iOS-arm64-${{ github.event.inputs.build_type || 'Debug' }}
+          path: ios/
+          retention-days: 30
+          if-no-files-found: error
+
+  # ── iOS Simulator arm64 ─────────────────────────────────────────────────
+  build-iossimulator:
+    runs-on: macos-26
+    if: github.event.inputs.build_iossimulator == 'true'
+    steps:
+      - name: Checkout CoreClrSDK
+        uses: actions/checkout@v4
+
+      - name: Clone dotnet/runtime
+        run: |
+          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+
+      - name: Build CoreCLR (iOS Simulator)
+        run: |
+          cd dotnet-runtime
+          ./build.sh clr.native+clr.corelib -os iossimulator -arch arm64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Copy artifacts to SDK (iOS Simulator)
+        run: |
+          bash BuildCoreClrSDK.sh $(pwd)/dotnet-runtime iossimulator ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreClrSDK-iOS-Simulator-${{ github.event.inputs.build_type || 'Debug' }}
+          path: iossimulator/
+          retention-days: 30
+          if-no-files-found: error

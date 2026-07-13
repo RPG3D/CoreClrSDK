@@ -1,0 +1,171 @@
+name: Package and Release CoreClrSDK
+
+# Downloads all platform SDKs from GitHub Actions artifacts
+# and packages them into a single ZIP file for release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+        type: string
+      build_type:
+        description: 'Build type to package'
+        required: true
+        default: 'Debug'
+        type: choice
+        options:
+          - Debug
+          - Release
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout CoreClrSDK
+        uses: actions/checkout@v4
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh jq
+
+      - name: Authenticate GitHub CLI
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Download all platform artifacts
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'Debug' }}"
+          RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=build-all.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+
+          if [ -z "$RUN_ID" ]; then
+            echo "ERROR: No successful build-all.yml run found"
+            exit 1
+          fi
+
+          echo "Downloading artifacts from run $RUN_ID (${BUILD_TYPE})..."
+
+          PLATFORMS=("Win64" "Linux-x64" "macOS-arm64" "Android-arm64" "iOS-arm64" "iOS-Simulator")
+          for PLATFORM in "${PLATFORMS[@]}"; do
+            ARTIFACT="CoreClrSDK-${PLATFORM}-${BUILD_TYPE}"
+            echo ">>> $ARTIFACT"
+            if gh run download $RUN_ID --repo ${{ github.repository }} --name "$ARTIFACT" 2>/dev/null; then
+              echo "  OK"
+            else
+              echo "  Not found (build may have been skipped)"
+            fi
+          done
+
+      - name: Organize platform directories
+        run: |
+          # gh run download extracts artifacts as-is.
+          # Each artifact contains a platform directory (win64/, linux/, macos/,
+          # android/, ios/, iossimulator/) with lib/ + runtime/ subdirs.
+          # We just verify they exist.
+          echo "=== Platform directories ==="
+          for d in win64 linux macos android ios iossimulator; do
+            if [ -d "$d" ]; then
+              echo "  $d: $(ls -1 $d/lib/* 2>/dev/null | wc -l | tr -d ' ') native, $(ls -1 $d/runtime/*.dll 2>/dev/null | wc -l | tr -d ' ') BCL dlls"
+            else
+              echo "  $d: NOT FOUND"
+            fi
+          done
+
+      - name: Create package directory
+        run: |
+          mkdir -p package/CoreClrSDK
+
+          # Copy platform directories
+          for d in win64 linux macos android ios iossimulator; do
+            if [ -d "$d" ]; then
+              cp -Rf "$d" package/CoreClrSDK/
+            fi
+          done
+
+          # Copy build scripts
+          cp BuildCoreClrSDK.sh package/CoreClrSDK/ 2>/dev/null || true
+          cp MakeCoreClrFramework.sh package/CoreClrSDK/ 2>/dev/null || true
+          cp FetchCoreClrSDK.sh package/CoreClrSDK/ 2>/dev/null || true
+          cp FetchCoreClrSDK.bat package/CoreClrSDK/ 2>/dev/null || true
+          cp FetchCoreClrSDK_iOS.sh package/CoreClrSDK/ 2>/dev/null || true
+
+          # Copy Unreal Build System files
+          cp CoreClrSDK.Build.cs package/CoreClrSDK/ 2>/dev/null || true
+          cp CoreClrSDK_APL.xml package/CoreClrSDK/ 2>/dev/null || true
+
+          # Copy headers
+          if [ -d "include" ]; then
+            cp -Rf include package/CoreClrSDK/
+          fi
+
+          # Copy docs
+          cp README.md package/CoreClrSDK/ 2>/dev/null || true
+          cp .gitignore package/CoreClrSDK/ 2>/dev/null || true
+
+          echo "=== Package contents ==="
+          ls -la package/CoreClrSDK/
+
+      - name: Create ZIP archive
+        run: |
+          cd package
+          ZIP_NAME="CoreClrSDK-${{ github.event.inputs.version || 'v0.1.0' }}-${{ github.event.inputs.build_type || 'Debug' }}.zip"
+          zip -r ${ZIP_NAME} CoreClrSDK/
+          echo "ZIP created: package/${ZIP_NAME}"
+          ls -lh ${ZIP_NAME}
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreClrSDK-${{ github.event.inputs.version || 'v0.1.0' }}-${{ github.event.inputs.build_type || 'Debug' }}
+          path: package/${{ env.ZIP_NAME }}
+          retention-days: 90
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version || 'v0.1.0' }}
+          name: CoreClrSDK ${{ github.event.inputs.version || 'v0.1.0' }}
+          body: |
+            CoreClrSDK release ${{ github.event.inputs.version || 'v0.1.0' }}
+
+            ## Build Type
+            ${{ github.event.inputs.build_type || 'Debug' }}
+
+            ## Platforms
+            - ✅ Win64 (Windows x64)
+            - ✅ Linux (x64)
+            - ✅ macOS (arm64)
+            - ✅ Android (arm64)
+            - ✅ iOS (arm64)
+            - ✅ iOS Simulator (arm64)
+
+            ## Installation
+            1. Download the ZIP file
+            2. Extract to your UnrealSharp plugin's `Source/ThirdParty/CoreClrSDK/` directory
+            3. Or use the build scripts to rebuild from source:
+               ```bash
+               ./BuildCoreClrSDK.sh ~/dotnet-runtime <platform>
+               ```
+
+            ## Build Info
+            Built from: https://github.com/dotnet/runtime.git (branch: release/10.0)
+            Build date: ${{ github.event.inputs.version || 'v0.1.0' }}
+          files: |
+            package/${{ env.ZIP_NAME }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

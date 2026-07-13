@@ -1,0 +1,16 @@
+# Platform binary directories (populated by BuildCoreClrSDK.sh or CI)
+# These are git-ignored — download from GitHub Releases instead.
+win64/
+linux/
+macos/
+android/
+ios/
+iossimulator/
+
+# IDE
+.idea/
+.vs/
+.vscode/
+
+# macOS
+.DS_Store
