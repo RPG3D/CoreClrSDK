@@ -10,16 +10,11 @@
 #   platform             Target platform: win64 | linux | macos | android | ios | iossimulator
 #   build-type           Debug (default) or Release
 #
-# Platforms and build commands:
-#   win64           ./build.sh clr.native+clr.corelib -configuration <type>
-#   linux           ./build.sh clr.native+clr.corelib -configuration <type>
-#   macos           ./build.sh clr.native+clr.corelib -configuration <type>
-#   android         ./build.sh clr.native+clr.corelib -os android -arch arm64 -configuration <type>
-#   ios             ./build.sh clr.native+clr.corelib -os ios -configuration <type>
-#   iossimulator    ./build.sh clr.native+clr.corelib -os iossimulator -arch arm64 -configuration <type>
+# Build subsets used (same for all platforms):
+#   clr.runtime+clr.alljits+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs
 #
 # Each platform produces:
-#   <platform>/lib/       — native runtime (.so / .dylib)
+#   <platform>/lib/       — native runtime (.so / .dylib / .dll)
 #   <platform>/runtime/   — BCL managed .dll
 
 set -euo pipefail
@@ -36,7 +31,6 @@ fi
 
 RUNTIME_DIR="$(cd "$RUNTIME_DIR" && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_TYPE_CAP="$(tr '[:lower:]' '[:upper:]' <<< "${BUILD_TYPE:0:1}")${BUILD_TYPE:1}"
 OUTPUT_DIR="$SCRIPT_DIR/$PLATFORM"
 
 echo "=== BuildCoreClrSDK ==="
@@ -46,26 +40,35 @@ echo "  Build type  : $BUILD_TYPE"
 echo "  Output dir  : $OUTPUT_DIR"
 echo ""
 
-# ── Map platform to build arguments ────────────────────────────────────────
+# ── Map platform to build arguments and artifact paths ─────────────────────
 OS_ARG=""
 ARCH_ARG=""
+RUNTIME_ID=""
+DOTNET_TFM="net10.0"
+
 case "$PLATFORM" in
     win64)
+        RUNTIME_ID="win-x64"
         ;;
     linux)
+        RUNTIME_ID="linux-x64"
         ;;
     macos)
+        RUNTIME_ID="osx-arm64"
         ;;
     android)
         OS_ARG="-os android"
         ARCH_ARG="-arch arm64"
+        RUNTIME_ID="android-arm64"
         ;;
     ios)
         OS_ARG="-os ios"
+        RUNTIME_ID="ios-arm64"
         ;;
     iossimulator)
         OS_ARG="-os iossimulator"
         ARCH_ARG="-arch arm64"
+        RUNTIME_ID="iossimulator-arm64"
         ;;
     *)
         echo "ERROR: unknown platform '$PLATFORM'" >&2
@@ -73,46 +76,37 @@ case "$PLATFORM" in
         ;;
 esac
 
-# ── Step 1: Build CoreCLR native + managed CoreLib ────────────────────────
-echo ""
-echo ">>> Building CoreCLR (Clr.Native + clr.corelib) for $PLATFORM..."
+# ── Step 1: Build CoreCLR + BCL ───────────────────────────────────────────
+# Full subset matching Android's documented build command.
+# This produces: native runtime, all JITs, managed CoreLib, native CoreLib,
+# tools, packages, and the full BCL libs.
+echo ">>> Building CoreCLR for $PLATFORM..."
 cd "$RUNTIME_DIR"
-./build.sh clr.native+clr.corelib $OS_ARG $ARCH_ARG -configuration "$BUILD_TYPE"
+./build.sh clr.runtime+clr.alljits+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs \
+    $OS_ARG $ARCH_ARG -configuration "$BUILD_TYPE"
 
-# ── Step 2: Locate build artifacts ────────────────────────────────────────
-echo ""
-echo ">>> Locating build artifacts..."
+# ── Step 2: Locate artifacts ──────────────────────────────────────────────
+# ALL platforms: primary source is the runtime pack (produced by libs subset).
+# It contains both native libs AND managed BCL DLLs.
+RUNTIME_PACK="$RUNTIME_DIR/artifacts/bin/microsoft.netcore.app.runtime.$RUNTIME_ID/$BUILD_TYPE/runtimes/$RUNTIME_ID"
+RUNTIME_PACK_NATIVE="$RUNTIME_PACK/native"
+RUNTIME_PACK_MANAGED="$RUNTIME_PACK/lib/$DOTNET_TFM"
 
-# Platform-specific artifact paths
+# CoreCLR artifacts dir — used only for pure-IL System.Private.CoreLib.dll.
+# Path pattern varies by platform: <os>.<arch>.<Config>
 case "$PLATFORM" in
-    win64)
-        CORECLR_ARTIFACTS="$RUNTIME_DIR/artifacts/bin/coreclr/win.x64.$BUILD_TYPE"
-        RUNTIME_PACK="$RUNTIME_DIR/artifacts/bin/microsoft.netcore.app.runtime.win-x64/$BUILD_TYPE/runtimes/win-x64"
-        ;;
-    linux)
-        CORECLR_ARTIFACTS="$RUNTIME_DIR/artifacts/bin/coreclr/linux.x64.$BUILD_TYPE"
-        RUNTIME_PACK="$RUNTIME_DIR/artifacts/bin/microsoft.netcore.app.runtime.linux-x64/$BUILD_TYPE/runtimes/linux-x64"
-        ;;
-    macos)
-        CORECLR_ARTIFACTS="$RUNTIME_DIR/artifacts/bin/coreclr/osx.arm64.$BUILD_TYPE"
-        RUNTIME_PACK="$RUNTIME_DIR/artifacts/bin/microsoft.netcore.app.runtime.osx-arm64/$BUILD_TYPE/runtimes/osx-arm64"
-        ;;
-    android)
-        CORECLR_ARTIFACTS="$RUNTIME_DIR/artifacts/bin/coreclr/android.arm64.$BUILD_TYPE"
-        RUNTIME_PACK="$RUNTIME_DIR/artifacts/bin/microsoft.netcore.app.runtime.android-arm64/$BUILD_TYPE/runtimes/android-arm64"
-        ;;
-    ios)
-        CORECLR_ARTIFACTS="$RUNTIME_DIR/artifacts/bin/coreclr/ios.arm64.$BUILD_TYPE"
-        RUNTIME_PACK="$RUNTIME_DIR/artifacts/bin/microsoft.netcore.app.runtime.ios-arm64/$BUILD_TYPE/runtimes/ios-arm64"
-        ;;
-    iossimulator)
-        CORECLR_ARTIFACTS="$RUNTIME_DIR/artifacts/bin/coreclr/iossimulator.arm64.$BUILD_TYPE"
-        RUNTIME_PACK="$RUNTIME_DIR/artifacts/bin/microsoft.netcore.app.runtime.iossimulator-arm64/$BUILD_TYPE/runtimes/iossimulator-arm64"
-        ;;
+    win64)    CORECLR_DIR="$RUNTIME_DIR/artifacts/bin/coreclr/win.x64.$BUILD_TYPE" ;;
+    linux)    CORECLR_DIR="$RUNTIME_DIR/artifacts/bin/coreclr/linux.x64.$BUILD_TYPE" ;;
+    macos)    CORECLR_DIR="$RUNTIME_DIR/artifacts/bin/coreclr/osx.arm64.$BUILD_TYPE" ;;
+    android)  CORECLR_DIR="$RUNTIME_DIR/artifacts/bin/coreclr/android.arm64.$BUILD_TYPE" ;;
+    ios)      CORECLR_DIR="$RUNTIME_DIR/artifacts/bin/coreclr/ios.arm64.$BUILD_TYPE" ;;
+    iossimulator) CORECLR_DIR="$RUNTIME_DIR/artifacts/bin/coreclr/iossimulator.arm64.$BUILD_TYPE" ;;
 esac
+CORECLR_IL="$CORECLR_DIR/IL/System.Private.CoreLib.dll"
 
-echo "  CoreCLR artifacts : $CORECLR_ARTIFACTS"
-echo "  Runtime pack      : $RUNTIME_PACK"
+echo "  Runtime pack native : $RUNTIME_PACK_NATIVE"
+echo "  Runtime pack managed: $RUNTIME_PACK_MANAGED"
+echo "  CoreCLR IL CoreLib  : $CORECLR_IL"
 
 # ── Step 3: Copy native libraries → <platform>/lib/ ───────────────────────
 echo ""
@@ -121,62 +115,40 @@ echo ">>> Copying native libraries..."
 mkdir -p "$OUTPUT_DIR/lib"
 rm -f "$OUTPUT_DIR/lib"/*
 
-# CoreCLR native runtime files
-copy_native_coreclr() {
-    local src_dir="$1"
-    local dst_dir="$2"
-    local ext="$3"
+# Native files we need (exclude mono/* debugger/* hot_reload/* marshal-ilgen/*)
+# These are the CoreCLR runtime + system native shims.
+CORE_NATIVE_LIBS="libcoreclr libclrjit libclrinterpreter"
+SYSTEM_NATIVE_LIBS="libSystem.Native libSystem.IO.Compression.Native libSystem.Globalization.Native libSystem.Net.Security.Native libSystem.Security.Cryptography.Native.Apple"
 
-    # CoreCLR runtime
-    for f in coreclr clrjit clrinterpreter; do
-        if [ -f "$src_dir/lib${f}.${ext}" ]; then
-            cp "$src_dir/lib${f}.${ext}" "$dst_dir/"
-            echo "  lib${f}.${ext}"
-        fi
-    done
-}
-
-# System native shims (from runtime pack)
-copy_native_shims() {
-    local src_dir="$1"
-    local dst_dir="$2"
-    local ext="$3"
-
-    for f in System.Native System.IO.Compression.Native System.Globalization.Native \
-             System.Net.Security.Native System.Security.Cryptography.Native.Apple; do
-        if [ -f "$src_dir/lib${f}.${ext}" ]; then
-            cp "$src_dir/lib${f}.${ext}" "$dst_dir/"
-            echo "  lib${f}.${ext}"
-        fi
-    done
-}
-
-NATIVE_EXT="so"
-RUNTIME_PACK_NATIVE="$RUNTIME_PACK/native"
+# Determine file extension
 case "$PLATFORM" in
-    win64)
-        NATIVE_EXT="dll"
-        RUNTIME_PACK_NATIVE="$RUNTIME_PACK/native"
-        ;;
-    linux|android)
-        NATIVE_EXT="so"
-        RUNTIME_PACK_NATIVE="$RUNTIME_PACK/native"
-        ;;
-    macos|ios|iossimulator)
-        NATIVE_EXT="dylib"
-        RUNTIME_PACK_NATIVE="$RUNTIME_PACK/native"
-        ;;
+    win64) NATIVE_EXT="dll" ;;
+    linux|android) NATIVE_EXT="so" ;;
+    macos|ios|iossimulator) NATIVE_EXT="dylib" ;;
 esac
 
-if [ -d "$CORECLR_ARTIFACTS" ]; then
-    copy_native_coreclr "$CORECLR_ARTIFACTS" "$OUTPUT_DIR/lib" "$NATIVE_EXT"
-fi
+# Copy from runtime pack native (primary source — has everything)
 if [ -d "$RUNTIME_PACK_NATIVE" ]; then
-    copy_native_shims "$RUNTIME_PACK_NATIVE" "$OUTPUT_DIR/lib" "$NATIVE_EXT"
+    # CoreCLR runtime libs
+    for lib in $CORE_NATIVE_LIBS; do
+        src="$RUNTIME_PACK_NATIVE/${lib}.${NATIVE_EXT}"
+        if [ -f "$src" ]; then
+            cp "$src" "$OUTPUT_DIR/lib/"
+            echo "  ${lib}.${NATIVE_EXT}"
+        fi
+    done
+    # System native shims
+    for lib in $SYSTEM_NATIVE_LIBS; do
+        src="$RUNTIME_PACK_NATIVE/${lib}.${NATIVE_EXT}"
+        if [ -f "$src" ]; then
+            cp "$src" "$OUTPUT_DIR/lib/"
+            echo "  ${lib}.${NATIVE_EXT}"
+        fi
+    done
 fi
 
-NATIVE_COUNT=$(ls -1 "$OUTPUT_DIR/lib"/*.${NATIVE_EXT} 2>/dev/null | wc -l | tr -d ' ')
-echo "  Total: ${NATIVE_COUNT} native .${NATIVE_EXT} files"
+NATIVE_COUNT=$(find "$OUTPUT_DIR/lib" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')
+echo "  Total: ${NATIVE_COUNT} native files"
 
 # ── Step 4: Copy BCL managed DLLs → <platform>/runtime/ ───────────────────
 echo ""
@@ -185,52 +157,30 @@ echo ">>> Copying BCL managed DLLs..."
 mkdir -p "$OUTPUT_DIR/runtime"
 rm -f "$OUTPUT_DIR/runtime"/*
 
-# Use the pure-IL System.Private.CoreLib.dll from CoreCLR build (avoids System.__Canon issue)
-CORECLR_IL="$CORECLR_ARTIFACTS/IL/System.Private.CoreLib.dll"
+# Step 4a: Pure-IL System.Private.CoreLib.dll (iOS/iOS Simulator: required for interpreter)
 if [ -f "$CORECLR_IL" ]; then
     cp "$CORECLR_IL" "$OUTPUT_DIR/runtime/System.Private.CoreLib.dll"
     echo "  System.Private.CoreLib.dll (pure-IL from CoreCLR IL/)"
 else
-    echo "  WARNING: CoreCLR IL/ System.Private.CoreLib.dll not found, will use testhost version"
+    echo "  NOTE: CoreCLR IL/ CoreLib not found, will use runtime pack version"
 fi
 
-# Copy remaining BCL from testhost
-# BCL version subdir — auto-detect from testhost path
-BCL_SRC=""
-for ver_dir in "$RUNTIME_DIR/artifacts/bin/testhost/"*"-$PLATFORM-$BUILD_TYPE"*"/shared/Microsoft.NETCore.App/"*/; do
-    if [ -d "$ver_dir" ]; then
-        BCL_SRC="$ver_dir"
-        break
-    fi
-done
-
-if [ -z "$BCL_SRC" ]; then
-    # Fallback: try to find BCL from runtime pack managed dir
-    BCL_SRC="$RUNTIME_PACK/lib/net10.0"
-    if [ ! -d "$BCL_SRC" ]; then
-        BCL_SRC="$RUNTIME_PACK/lib/net10.0"
-    fi
-fi
-
-if [ -d "$BCL_SRC" ]; then
-    for dll in "$BCL_SRC"/*.dll; do
+# Step 4b: All BCL DLLs from runtime pack managed dir
+if [ -d "$RUNTIME_PACK_MANAGED" ]; then
+    for dll in "$RUNTIME_PACK_MANAGED"/*.dll; do
         name=$(basename "$dll")
-        # Don't overwrite the pure-IL CoreLib we already placed
-        if [ "$name" != "System.Private.CoreLib.dll" ] || [ ! -f "$OUTPUT_DIR/runtime/System.Private.CoreLib.dll" ]; then
-            cp "$dll" "$OUTPUT_DIR/runtime/"
+        # Don't overwrite pure-IL CoreLib if we already placed it
+        if [ "$name" = "System.Private.CoreLib.dll" ] && [ -f "$OUTPUT_DIR/runtime/System.Private.CoreLib.dll" ]; then
+            continue
         fi
+        cp "$dll" "$OUTPUT_DIR/runtime/"
     done
-    DLL_COUNT=$(ls -1 "$OUTPUT_DIR/runtime"/*.dll 2>/dev/null | wc -l | tr -d ' ')
-    echo "  Total: ${DLL_COUNT} BCL .dll files from $BCL_SRC"
+    DLL_COUNT=$(find "$OUTPUT_DIR/runtime" -maxdepth 1 -name "*.dll" 2>/dev/null | wc -l | tr -d ' ')
+    echo "  Total: ${DLL_COUNT} BCL .dll files from $RUNTIME_PACK_MANAGED"
 else
-    echo "  WARNING: BCL source directory not found"
-    # Try runtime pack fallback
-    RUNTIME_MANAGED="$RUNTIME_PACK/lib/net10.0"
-    if [ -d "$RUNTIME_MANAGED" ]; then
-        cp "$RUNTIME_MANAGED"/*.dll "$OUTPUT_DIR/runtime/" 2>/dev/null || true
-        DLL_COUNT=$(ls -1 "$OUTPUT_DIR/runtime"/*.dll 2>/dev/null | wc -l | tr -d ' ')
-        echo "  Fallback: ${DLL_COUNT} BCL .dll files from $RUNTIME_MANAGED"
-    fi
+    echo "  ERROR: Runtime pack managed DLLs not found at $RUNTIME_PACK_MANAGED"
+    echo "  The 'libs' subset may not have built correctly."
+    exit 1
 fi
 
 # ── Step 5: iOS-specific: build .embeddedframework.zip ────────────────────
@@ -242,7 +192,8 @@ case "$PLATFORM" in
         ;;
 esac
 
+# ── Step 6: Summary ───────────────────────────────────────────────────────
 echo ""
 echo "=== Done. CoreClrSDK populated for $PLATFORM ($BUILD_TYPE). ==="
-echo "  Native:  $OUTPUT_DIR/lib/"
-echo "  Managed: $OUTPUT_DIR/runtime/"
+echo "  Native:  $OUTPUT_DIR/lib/ ($(find "$OUTPUT_DIR/lib" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ') files)"
+echo "  Managed: $OUTPUT_DIR/runtime/ ($(find "$OUTPUT_DIR/runtime" -maxdepth 1 -name '*.dll' 2>/dev/null | wc -l | tr -d ' ') DLLs)"

@@ -49,6 +49,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  BUILD_SUBSET: clr.runtime+clr.alljits+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs
+
 jobs:
   # ── Windows x64 ──────────────────────────────────────────────────────────
   build-win64:
@@ -60,13 +63,14 @@ jobs:
 
       - name: Clone dotnet/runtime
         run: |
+          git config --system core.longpaths true
           git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
         shell: bash
 
       - name: Build CoreCLR (Windows x64)
         run: |
           cd dotnet-runtime
-          ./build.cmd clr.native+clr.corelib -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+          build.cmd ${{ env.BUILD_SUBSET }} -configuration ${{ github.event.inputs.build_type || 'Debug' }}
         shell: cmd
 
       - name: Copy artifacts to SDK
@@ -93,7 +97,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang libicu-dev libssl-dev libkrb5-dev
+          sudo apt-get install -y cmake ninja-build clang llvm lld \
+            libicu-dev libssl-dev libkrb5-dev \
+            liblttng-ust-dev libunwind-dev \
+            libcurl4-openssl-dev zlib1g-dev
 
       - name: Clone dotnet/runtime
         run: |
@@ -102,7 +109,7 @@ jobs:
       - name: Build CoreCLR (Linux x64)
         run: |
           cd dotnet-runtime
-          ./build.sh clr.native+clr.corelib -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+          ./build.sh ${{ env.BUILD_SUBSET }} -configuration ${{ github.event.inputs.build_type || 'Debug' }}
 
       - name: Copy artifacts to SDK
         run: |
@@ -131,7 +138,7 @@ jobs:
       - name: Build CoreCLR (macOS arm64)
         run: |
           cd dotnet-runtime
-          ./build.sh clr.native+clr.corelib -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+          ./build.sh ${{ env.BUILD_SUBSET }} -configuration ${{ github.event.inputs.build_type || 'Debug' }}
 
       - name: Copy artifacts to SDK
         run: |
@@ -163,7 +170,7 @@ jobs:
       - name: Build CoreCLR (Android arm64)
         run: |
           cd dotnet-runtime
-          ./build.sh clr.native+clr.corelib -os android -arch arm64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+          ./build.sh ${{ env.BUILD_SUBSET }} -os android -arch arm64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
 
       - name: Copy artifacts to SDK
         run: |
@@ -192,7 +199,7 @@ jobs:
       - name: Build CoreCLR (iOS Device)
         run: |
           cd dotnet-runtime
-          ./build.sh clr.native+clr.corelib -os ios -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+          ./build.sh ${{ env.BUILD_SUBSET }} -os ios -configuration ${{ github.event.inputs.build_type || 'Debug' }}
 
       - name: Copy artifacts to SDK (iOS)
         run: |
@@ -221,7 +228,7 @@ jobs:
       - name: Build CoreCLR (iOS Simulator)
         run: |
           cd dotnet-runtime
-          ./build.sh clr.native+clr.corelib -os iossimulator -arch arm64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+          ./build.sh ${{ env.BUILD_SUBSET }} -os iossimulator -arch arm64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
 
       - name: Copy artifacts to SDK (iOS Simulator)
         run: |
