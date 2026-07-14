@@ -10,8 +10,10 @@
 #
 # Arguments:
 #   dotnet-src-dir   Path to the dotnet/runtime repository root (must be already built).
-#   platform         Target platform: win64 | linux | macos | android | ios | iossimulator
+#   platform         Target platform: linux | macos | android | ios | iossimulator
 #   build-type       Debug (default) | Release
+#
+# Note: Windows uses CopySDKFromSrc.bat, not this script.
 #
 # Reference: MonoSDK/CopySDKFromSrc.sh (same approach: cp -Rf directories, no manual file listing)
 
@@ -49,7 +51,7 @@ echo ""
 
 # ── Validate platform ────────────────────────────────────────────────────────
 case "$PLATFORM" in
-    win64|linux|macos|android|ios|iossimulator) ;;
+    linux|macos|android|ios|iossimulator) ;;
     *)
         echo "Error: unknown platform '$PLATFORM'." >&2
         exit 1
@@ -60,11 +62,6 @@ esac
 SRC_ARTIFACTS="$DOTNET_SRC/artifacts"
 
 case "$PLATFORM" in
-    win64)
-        CORECLR_TRIPLE="win.x64.$BUILD_TYPE"
-        RUNTIME_RID="win-x64"
-        DEST="$SDK_DIR/win64"
-        ;;
     linux)
         CORECLR_TRIPLE="linux.x64.$BUILD_TYPE"
         RUNTIME_RID="linux-x64"
@@ -104,29 +101,38 @@ mkdir -p "$DEST/lib" "$DEST/runtime"
 # ── 1. Native libraries → <platform>/lib/ ───────────────────────────────────
 echo "--- Native libraries ---"
 
-# 1a. CoreCLR runtime engines (from coreclr artifacts)
-# Unix platforms use "lib<name>.so/dylib", Windows uses "<name>.dll" (no "lib" prefix)
-if [[ -d "$CORECLR_DIR" ]]; then
-    for lib in coreclr clrjit clrinterpreter; do
+# 1a. CoreCLR runtime engines (from coreclr artifacts + runtime pack native)
+# Unix platforms use "lib<name>.so/dylib"
+for lib in coreclr clrjit clrinterpreter mscordaccore mscordbi; do
+    copied=false
+    # Try CORECLR_DIR first
+    if [[ -d "$CORECLR_DIR" ]]; then
         for ext in so dylib; do
             src="$CORECLR_DIR/lib${lib}.${ext}"
             if [[ -f "$src" ]]; then
                 cp "$src" "$DEST/lib/"
                 echo "  lib${lib}.${ext}"
+                copied=true
                 break
             fi
         done
-        # Windows: no "lib" prefix, .dll extension
-        src="$CORECLR_DIR/${lib}.dll"
-        if [[ -f "$src" ]]; then
-            cp "$src" "$DEST/lib/"
-            echo "  ${lib}.dll"
-        fi
-    done
-fi
+    fi
+    # Fallback: check runtime pack native
+    if [[ "$copied" != "true" && -d "$RUNTIME_PACK_NATIVE" ]]; then
+        for ext in so dylib; do
+            src="$RUNTIME_PACK_NATIVE/lib${lib}.${ext}"
+            if [[ -f "$src" ]]; then
+                cp "$src" "$DEST/lib/"
+                echo "  lib${lib}.${ext}"
+                copied=true
+                break
+            fi
+        done
+    fi
+done
 
 # 1b. System native shims (from runtime pack native)
-# Unix: lib<name>.so/dylib, Windows: <name>.dll (no "lib" prefix)
+# Unix: lib<name>.so/dylib
 if [[ -d "$RUNTIME_PACK_NATIVE" ]]; then
     for lib in System.Native System.IO.Compression.Native System.Globalization.Native System.Net.Security.Native; do
         for ext in so dylib; do
@@ -137,15 +143,9 @@ if [[ -d "$RUNTIME_PACK_NATIVE" ]]; then
                 break
             fi
         done
-        # Windows: no "lib" prefix
-        src="$RUNTIME_PACK_NATIVE/${lib}.dll"
-        if [[ -f "$src" ]]; then
-            cp "$src" "$DEST/lib/"
-            echo "  ${lib}.dll"
-        fi
     done
     # Platform-specific crypto shim
-    for lib in System.Security.Cryptography.Native.Apple System.Security.Cryptography.Native.Android; do
+    for lib in System.Security.Cryptography.Native.Apple System.Security.Cryptography.Native.Android System.Security.Cryptography.Native.OpenSsl; do
         for ext in so dylib; do
             src="$RUNTIME_PACK_NATIVE/lib${lib}.${ext}"
             if [[ -f "$src" ]]; then
@@ -154,11 +154,6 @@ if [[ -d "$RUNTIME_PACK_NATIVE" ]]; then
                 break
             fi
         done
-        src="$RUNTIME_PACK_NATIVE/${lib}.dll"
-        if [[ -f "$src" ]]; then
-            cp "$src" "$DEST/lib/"
-            echo "  ${lib}.dll"
-        fi
     done
 fi
 
@@ -181,14 +176,25 @@ else
 fi
 
 # 2a. Overwrite System.Private.CoreLib.dll with pure-IL version (iOS interpreter fix)
-CORECLR_IL="$CORECLR_DIR/IL/System.Private.CoreLib.dll"
-CORECLR_PDB="$CORECLR_DIR/IL/System.Private.CoreLib.pdb"
-if [[ -f "$CORECLR_IL" ]]; then
-    cp "$CORECLR_IL" "$DEST/runtime/System.Private.CoreLib.dll"
+# Falls back to runtime-pack-native copy when CoreLib is missing from managed dir
+# (.NET 10 Windows puts ReadyToRun CoreLib in native/, not managed lib/net10.0)
+CORECLR_IL_DIR="$CORECLR_DIR/IL"
+SPC_DEST="$DEST/runtime/System.Private.CoreLib.dll"
+SPC_PDB_DEST="$DEST/runtime/System.Private.CoreLib.pdb"
+
+if [[ -f "$CORECLR_IL_DIR/System.Private.CoreLib.dll" ]]; then
+    cp "$CORECLR_IL_DIR/System.Private.CoreLib.dll" "$SPC_DEST"
     echo "  System.Private.CoreLib.dll (pure-IL from CoreCLR IL/)"
-    if [[ -f "$CORECLR_PDB" ]]; then
-        cp "$CORECLR_PDB" "$DEST/runtime/System.Private.CoreLib.pdb"
+    if [[ -f "$CORECLR_IL_DIR/System.Private.CoreLib.pdb" ]]; then
+        cp "$CORECLR_IL_DIR/System.Private.CoreLib.pdb" "$SPC_PDB_DEST"
         echo "  System.Private.CoreLib.pdb (from CoreCLR IL/)"
+    fi
+elif [[ ! -f "$SPC_DEST" && -f "$RUNTIME_PACK_NATIVE/System.Private.CoreLib.dll" ]]; then
+    cp "$RUNTIME_PACK_NATIVE/System.Private.CoreLib.dll" "$SPC_DEST"
+    echo "  System.Private.CoreLib.dll (from runtime pack native — .NET 10 ReadyToRun)"
+    if [[ -f "$RUNTIME_PACK_NATIVE/System.Private.CoreLib.pdb" ]]; then
+        cp "$RUNTIME_PACK_NATIVE/System.Private.CoreLib.pdb" "$SPC_PDB_DEST"
+        echo "  System.Private.CoreLib.pdb (from runtime pack native)"
     fi
 fi
 

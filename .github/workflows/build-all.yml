@@ -75,8 +75,8 @@ jobs:
 
       - name: Copy artifacts to SDK
         run: |
-          bash CopySDKFromSrc.sh $(pwd)/dotnet-runtime win64 ${{ github.event.inputs.build_type || 'Debug' }}
-        shell: bash
+          CopySDKFromSrc.bat dotnet-runtime ${{ github.event.inputs.build_type || 'Debug' }}
+        shell: cmd
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

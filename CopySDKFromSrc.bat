@@ -50,7 +50,7 @@ echo.
 
 rem -- Copy artifacts --------------------------------------------------------------
 set "SRC_ARTIFACTS=%DOTNET_SRC%\artifacts"
-set "CORECLR_TRIPLE=win.x64.%BUILD_TYPE%"
+set "CORECLR_TRIPLE=windows.x64.%BUILD_TYPE%"
 set "RUNTIME_RID=win-x64"
 set "DEST=%SDK_DIR%\win64"
 
@@ -59,21 +59,35 @@ mkdir "%DEST%\lib" "%DEST%\runtime"
 
 set "ROBOCOPY_ERROR=0"
 
-rem 1. CoreCLR runtime engines (from coreclr artifacts, no "lib" prefix on Windows)
+rem Runtime pack native path (needed by both step 1 and step 2)
+set "RUNTIME_PACK_NATIVE=%SRC_ARTIFACTS%\bin\microsoft.netcore.app.runtime.%RUNTIME_RID%\%BUILD_TYPE%\runtimes\%RUNTIME_RID%\native"
+
+rem 1. CoreCLR runtime engines (from coreclr artifacts + runtime pack native — .NET 10 puts them there on Windows)
 echo ^>^>^> Copying native libraries...
 
 set "CORECLR_DIR=%SRC_ARTIFACTS%\bin\coreclr\%CORECLR_TRIPLE%"
-if exist "%CORECLR_DIR%" (
-    for %%f in (coreclr.dll clrjit.dll clrinterpreter.dll) do (
-        if exist "%CORECLR_DIR%\%%f" (
-            copy /y "%CORECLR_DIR%\%%f" "%DEST%\lib\" >nul
-            echo   %%f
-        )
+for %%f in (coreclr.dll clrjit.dll clrinterpreter.dll mscordaccore.dll mscordbi.dll) do (
+    set "COPIED="
+    rem Try CORECLR_DIR first
+    if exist "%CORECLR_DIR%\%%f" (
+        copy /y "%CORECLR_DIR%\%%f" "%DEST%\lib\" >nul
+        echo   %%f
+        set "COPIED=1"
+    )
+    rem Fallback: check runtime pack native
+    if not defined COPIED if exist "%RUNTIME_PACK_NATIVE%\%%f" (
+        copy /y "%RUNTIME_PACK_NATIVE%\%%f" "%DEST%\lib\" >nul
+        echo   %%f ^(from runtime pack^)
+    )
+)
+rem Also copy PDBs for native DLLs
+for %%f in (coreclr.pdb clrjit.pdb mscordaccore.pdb mscordbi.pdb) do (
+    if exist "%RUNTIME_PACK_NATIVE%\%%f" (
+        copy /y "%RUNTIME_PACK_NATIVE%\%%f" "%DEST%\lib\" >nul
     )
 )
 
 rem 2. System native shims (from runtime pack native, no "lib" prefix on Windows)
-set "RUNTIME_PACK_NATIVE=%SRC_ARTIFACTS%\bin\microsoft.netcore.app.runtime.%RUNTIME_RID%\%BUILD_TYPE%\runtimes\%RUNTIME_RID%\native"
 if exist "%RUNTIME_PACK_NATIVE%" (
     for %%f in (System.Native.dll System.IO.Compression.Native.dll System.Globalization.Native.dll System.Net.Security.Native.dll) do (
         if exist "%RUNTIME_PACK_NATIVE%\%%f" (
@@ -96,13 +110,25 @@ if exist "%RUNTIME_PACK_MANAGED%" (
 )
 
 rem 4. Overwrite System.Private.CoreLib.dll with pure-IL version
+rem Falls back to runtime-pack-native copy when CoreLib is missing from managed dir
+rem (.NET 10 Windows puts ReadyToRun CoreLib in native/, not managed lib/net10.0)
 set "CORECLR_IL=%CORECLR_DIR%\IL\System.Private.CoreLib.dll"
+set "SPC_DEST=%DEST%\runtime\System.Private.CoreLib.dll"
+set "SPC_PDB_DEST=%DEST%\runtime\System.Private.CoreLib.pdb"
+
 if exist "%CORECLR_IL%" (
-    copy /y "%CORECLR_IL%" "%DEST%\runtime\System.Private.CoreLib.dll" >nul
+    copy /y "%CORECLR_IL%" "%SPC_DEST%" >nul
     echo   System.Private.CoreLib.dll ^(pure-IL from CoreCLR IL/^)
     if exist "%CORECLR_DIR%\IL\System.Private.CoreLib.pdb" (
-        copy /y "%CORECLR_DIR%\IL\System.Private.CoreLib.pdb" "%DEST%\runtime\System.Private.CoreLib.pdb" >nul
+        copy /y "%CORECLR_DIR%\IL\System.Private.CoreLib.pdb" "%SPC_PDB_DEST%" >nul
         echo   System.Private.CoreLib.pdb
+    )
+) else if not exist "%SPC_DEST%" if exist "%RUNTIME_PACK_NATIVE%\System.Private.CoreLib.dll" (
+    copy /y "%RUNTIME_PACK_NATIVE%\System.Private.CoreLib.dll" "%SPC_DEST%" >nul
+    echo   System.Private.CoreLib.dll ^(from runtime pack native — .NET 10 ReadyToRun^)
+    if exist "%RUNTIME_PACK_NATIVE%\System.Private.CoreLib.pdb" (
+        copy /y "%RUNTIME_PACK_NATIVE%\System.Private.CoreLib.pdb" "%SPC_PDB_DEST%" >nul
+        echo   System.Private.CoreLib.pdb ^(from runtime pack native^)
     )
 )
 
