@@ -105,42 +105,60 @@ mkdir -p "$DEST/lib" "$DEST/runtime"
 echo "--- Native libraries ---"
 
 # 1a. CoreCLR runtime engines (from coreclr artifacts)
-# Only copy the base libs (skip cross-compiled JIT variants)
+# Unix platforms use "lib<name>.so/dylib", Windows uses "<name>.dll" (no "lib" prefix)
 if [[ -d "$CORECLR_DIR" ]]; then
-    for lib in libcoreclr libclrjit libclrinterpreter; do
-        for ext in so dylib dll; do
-            src="$CORECLR_DIR/${lib}.${ext}"
+    for lib in coreclr clrjit clrinterpreter; do
+        for ext in so dylib; do
+            src="$CORECLR_DIR/lib${lib}.${ext}"
             if [[ -f "$src" ]]; then
                 cp "$src" "$DEST/lib/"
-                echo "  ${lib}.${ext}"
+                echo "  lib${lib}.${ext}"
                 break
             fi
         done
+        # Windows: no "lib" prefix, .dll extension
+        src="$CORECLR_DIR/${lib}.dll"
+        if [[ -f "$src" ]]; then
+            cp "$src" "$DEST/lib/"
+            echo "  ${lib}.dll"
+        fi
     done
 fi
 
 # 1b. System native shims (from runtime pack native)
+# Unix: lib<name>.so/dylib, Windows: <name>.dll (no "lib" prefix)
 if [[ -d "$RUNTIME_PACK_NATIVE" ]]; then
-    for lib in libSystem.Native libSystem.IO.Compression.Native libSystem.Globalization.Native libSystem.Net.Security.Native; do
-        for ext in so dylib dll; do
-            src="$RUNTIME_PACK_NATIVE/${lib}.${ext}"
+    for lib in System.Native System.IO.Compression.Native System.Globalization.Native System.Net.Security.Native; do
+        for ext in so dylib; do
+            src="$RUNTIME_PACK_NATIVE/lib${lib}.${ext}"
             if [[ -f "$src" ]]; then
                 cp "$src" "$DEST/lib/"
-                echo "  ${lib}.${ext}"
+                echo "  lib${lib}.${ext}"
                 break
             fi
         done
+        # Windows: no "lib" prefix
+        src="$RUNTIME_PACK_NATIVE/${lib}.dll"
+        if [[ -f "$src" ]]; then
+            cp "$src" "$DEST/lib/"
+            echo "  ${lib}.dll"
+        fi
     done
     # Platform-specific crypto shim
-    for lib in libSystem.Security.Cryptography.Native.Apple libSystem.Security.Cryptography.Native.Android; do
-        for ext in so dylib dll; do
-            src="$RUNTIME_PACK_NATIVE/${lib}.${ext}"
+    for lib in System.Security.Cryptography.Native.Apple System.Security.Cryptography.Native.Android; do
+        for ext in so dylib; do
+            src="$RUNTIME_PACK_NATIVE/lib${lib}.${ext}"
             if [[ -f "$src" ]]; then
                 cp "$src" "$DEST/lib/"
-                echo "  ${lib}.${ext}"
+                echo "  lib${lib}.${ext}"
                 break
             fi
         done
+        src="$RUNTIME_PACK_NATIVE/${lib}.dll"
+        if [[ -f "$src" ]]; then
+            cp "$src" "$DEST/lib/"
+            echo "  ${lib}.dll"
+        fi
     done
 fi
 
