@@ -196,6 +196,21 @@ DLL_COUNT=$(find "$DEST/runtime" -maxdepth 1 -name "*.dll" 2>/dev/null | wc -l |
 PDB_COUNT=$(find "$DEST/runtime" -maxdepth 1 -name "*.pdb" 2>/dev/null | wc -l | tr -d ' ')
 echo "  Total: ${DLL_COUNT} DLLs + ${PDB_COUNT} PDBs"
 
+# ── 4. Write VERSION.txt (matching MonoSDK convention) ─────────────────────────
+DOTNET_BRANCH="$(cd "$DOTNET_SRC" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
+DOTNET_COMMIT="$(cd "$DOTNET_SRC" && git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+
+cat > "$DEST/VERSION.txt" <<EOF
+dotnet/runtime source
+  repo:   $(cd "$DOTNET_SRC" && git remote get-url origin 2>/dev/null || echo 'unknown')
+  branch: $DOTNET_BRANCH
+  commit: $DOTNET_COMMIT
+
+Platform: $PLATFORM
+Build type: $BUILD_TYPE
+Build subsets: clr.runtime+clr.alljits+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs
+EOF
+
 # ── 3. iOS-specific: build .embeddedframework.zip ───────────────────────────
 case "$PLATFORM" in
     ios|iossimulator)
