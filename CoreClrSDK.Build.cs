@@ -23,12 +23,17 @@
 // SDK directory layout (Source/ThirdParty/CoreClrSDK/):
 //   Android/lib/        native .so  (libcoreclr.so, libclrjit.so, libSystem.*.so)
 //   Android/runtime/    BCL managed .dll
-//   iOSSimulator/lib/   native .dylib + .embeddedframework.zip
+//   iOSSimulator/lib/      native .dylib + .embeddedframework.zip  (arm64 sim)
 //   iOSSimulator/runtime/ BCL managed .dll
+//   iOSSimulatorX64/lib/   native .dylib + .embeddedframework.zip  (x64 sim)
+//   iOSSimulatorX64/runtime/ BCL managed .dll
 //   include/            coreclrhost.h, host_runtime_contract.h
 // CoreClrSDK_APL.xml lives alongside this file.
+// iOS Simulator arch is selected by the host Mac CPU (see platformDir below):
+// iOSSimulator on Apple Silicon (arm64), iOSSimulatorX64 on Intel (x64).
 
 using System.IO;
+using System.Runtime.InteropServices;
 using UnrealBuildTool;
 
 public class CoreClrSDK : ModuleRules
@@ -95,7 +100,16 @@ public class CoreClrSDK : ModuleRules
             // Architecture distinguishes: UnrealArch.IOSSimulator vs UnrealArch.Arm64.
             // Currently only iOS Simulator is supported (device is future work).
             bool bIsSimulator = (Target.Architecture == UnrealArch.IOSSimulator);
-            string platformDir = bIsSimulator ? "iOSSimulator" : "IOS";
+
+            // iOS Simulator arch follows the host Mac CPU: the iOS Simulator itself
+            // runs arm64 on Apple Silicon and x64 on Intel, so the CoreCLR sim
+            // runtime must match the host. Mirrors dotnet's -arch default and the
+            // two CI jobs (iossimulator -> arm64, iossimulatorx64 -> x64).
+            // NOTE: an Apple Silicon Mac running an x64 simulator via Rosetta 2 is
+            // not auto-detected; rename the dir or override locally if you need that.
+            string simulatorDir = (RuntimeInformation.ProcessArchitecture == Architecture.Arm64)
+                ? "iOSSimulator" : "iOSSimulatorX64";
+            string platformDir = bIsSimulator ? simulatorDir : "IOS";
             string nativeLibDir = Path.Combine(sdkRoot, platformDir, "lib");
             string bclRuntimeDir = Path.Combine(sdkRoot, platformDir, "runtime");
 
@@ -177,6 +191,8 @@ public class CoreClrSDK : ModuleRules
             if (Target.ProjectFile != null)
             {
                 string projectDir = Path.GetDirectoryName(Target.ProjectFile.FullName)!;
+                // Project DLLs are arch-neutral IL, so ONE iOSSimulator/ dir serves
+                // both arm64-sim and x64-sim (do NOT split by simulatorDir).
                 string managedPlatformDir = bIsSimulator ? "iOSSimulator" : "IOS";
                 string managedContentDir = Path.Combine(projectDir, "Content", "Managed", managedPlatformDir);
                 if (Directory.Exists(managedContentDir))

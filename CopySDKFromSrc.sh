@@ -10,10 +10,15 @@
 #
 # Arguments:
 #   dotnet-src-dir   Path to the dotnet/runtime repository root (must be already built).
-#   platform         Target platform: linux | macos | android | ios | iossimulator
+#   platform         Target platform: linux | macos | android | ios | iossimulator | iossimulatorx64
 #   build-type       Debug (default) | Release
 #
 # Note: Windows uses CopySDKFromSrc.bat, not this script.
+#
+# iossimulator      = iOS Simulator arm64 (Apple Silicon host)  -> iossimulator/
+# iossimulatorx64   = iOS Simulator x64   (Intel host)          -> iossimulatorx64/
+# The iOS Simulator arch follows the host Mac CPU: arm64 on Apple Silicon,
+# x64 on Intel. Build/pick the matching arch explicitly to avoid host-coupling.
 #
 # Reference: MonoSDK/CopySDKFromSrc.sh (same approach: cp -Rf directories, no manual file listing)
 
@@ -51,7 +56,7 @@ echo ""
 
 # ── Validate platform ────────────────────────────────────────────────────────
 case "$PLATFORM" in
-    linux|macos|android|ios|iossimulator) ;;
+    linux|macos|android|ios|iossimulator|iossimulatorx64) ;;
     *)
         echo "Error: unknown platform '$PLATFORM'." >&2
         exit 1
@@ -86,6 +91,11 @@ case "$PLATFORM" in
         CORECLR_TRIPLE="iossimulator.arm64.$BUILD_TYPE"
         RUNTIME_RID="iossimulator-arm64"
         DEST="$SDK_DIR/iossimulator"
+        ;;
+    iossimulatorx64)
+        CORECLR_TRIPLE="iossimulator.x64.$BUILD_TYPE"
+        RUNTIME_RID="iossimulator-x64"
+        DEST="$SDK_DIR/iossimulatorx64"
         ;;
 esac
 
@@ -219,7 +229,7 @@ EOF
 
 # ── 3. iOS-specific: build .embeddedframework.zip ───────────────────────────
 case "$PLATFORM" in
-    ios|iossimulator)
+    ios|iossimulator|iossimulatorx64)
         echo ""
         echo "--- iOS .embeddedframework.zip ---"
         bash "$SDK_DIR/MakeCoreClrFramework.sh" "$PLATFORM" "$DEST/lib" "$DEST/lib"

@@ -144,12 +144,27 @@ jobs:
           fi
           ls -la iossimulator/ 2>/dev/null || echo "  iossimulator/ not found"
 
+      - name: Download iOS Simulator X64 SDK artifact
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'Debug' }}"
+          echo ">>> Downloading iOS Simulator X64 SDK (${BUILD_TYPE})..."
+          RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=build-all.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$RUN_ID" ]; then
+            rm -rf iossimulatorx64/
+            mkdir -p iossimulatorx64
+            gh run download $RUN_ID --repo ${{ github.repository }} --name "CoreClrSDK-iOS-Simulator-X64-${BUILD_TYPE}" --dir iossimulatorx64/
+            echo "  OK"
+          else
+            echo "  Not found"
+          fi
+          ls -la iossimulatorx64/ 2>/dev/null || echo "  iossimulatorx64/ not found"
+
       # ── Verify downloaded SDKs ──────────────────────────────────────────────
 
       - name: Verify downloaded SDKs
         run: |
           echo "=== Platform directories ==="
-          for d in win64 linux macos android ios iossimulator; do
+          for d in win64 linux macos android ios iossimulator iossimulatorx64; do
             if [ -d "$d" ]; then
               NATIVE=$(ls -1 $d/lib/* 2>/dev/null | wc -l | tr -d ' ')
               BCL=$(ls -1 $d/runtime/*.dll 2>/dev/null | wc -l | tr -d ' ')
@@ -166,7 +181,7 @@ jobs:
           mkdir -p package/CoreClrSDK
 
           # Copy platform directories
-          for d in win64 linux macos android ios iossimulator; do
+          for d in win64 linux macos android ios iossimulator iossimulatorx64; do
             if [ -d "$d" ]; then
               cp -Rf "$d" package/CoreClrSDK/
             fi
@@ -238,6 +253,7 @@ jobs:
             - ✅ Android (arm64)
             - ✅ iOS (arm64)
             - ✅ iOS Simulator (arm64)
+            - ✅ iOS Simulator (x64)
 
             ## Installation
             1. Download the ZIP file

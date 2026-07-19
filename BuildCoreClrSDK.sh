@@ -9,7 +9,7 @@
 #
 # Arguments:
 #   dotnet-runtime-dir   Path to dotnet/runtime repository clone
-#   platform             Target platform: win64 | linux | macos | android | ios | iossimulator
+#   platform             Target platform: win64 | linux | macos | android | ios | iossimulator | iossimulatorx64
 #   build-type           Debug (default) or Release
 #
 # Build subsets: clr.runtime+clr.alljits+clr.corelib+clr.nativecorelib+
@@ -23,7 +23,7 @@ BUILD_TYPE="${3:-Debug}"
 
 if [ -z "$RUNTIME_DIR" ] || [ -z "$PLATFORM" ]; then
     echo "Usage: $0 <dotnet-runtime-dir> <platform> [build-type]" >&2
-    echo "  platforms: win64 | linux | macos | android | ios | iossimulator" >&2
+    echo "  platforms: win64 | linux | macos | android | ios | iossimulator | iossimulatorx64" >&2
     exit 1
 fi
 
@@ -44,6 +44,7 @@ case "$PLATFORM" in
     android)    OS_ARG="-os android";     ARCH_ARG="-arch arm64" ;;
     ios)        OS_ARG="-os ios" ;;
     iossimulator) OS_ARG="-os iossimulator"; ARCH_ARG="-arch arm64" ;;
+    iossimulatorx64) OS_ARG="-os iossimulator"; ARCH_ARG="-arch x64" ;;
     *)
         echo "ERROR: unknown platform '$PLATFORM'" >&2
         exit 1

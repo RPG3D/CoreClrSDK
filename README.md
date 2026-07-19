@@ -19,11 +19,13 @@ git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git 
 # Build for a specific platform
 ./BuildCoreClrSDK.sh ~/dotnet-runtime <platform> [build-type]
 
-# Platforms: win64 | linux | macos | android | ios | iossimulator
+# Platforms: win64 | linux | macos | android | ios | iossimulator | iossimulatorx64
 # Build types: Debug (default) | Release
 
 # Example: iOS Simulator Debug
 ./BuildCoreClrSDK.sh ~/dotnet-runtime iossimulator Debug
+# (iossimulator = arm64 sim for Apple Silicon Macs; iossimulatorx64 = x64 sim for Intel Macs.
+#  The iOS Simulator arch follows the host CPU - build both if you target both Macs.)
 ```
 
 Prerequisites: Visual Studio 2022 (Windows), Xcode (macOS/iOS), Android NDK (Android), CMake + Ninja.

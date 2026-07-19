@@ -41,6 +41,11 @@ on:
         required: false
         type: boolean
         default: true
+      build_iossimulator_x64:
+        description: 'Build iOS Simulator x64'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -239,5 +244,37 @@ jobs:
         with:
           name: CoreClrSDK-iOS-Simulator-${{ github.event.inputs.build_type || 'Debug' }}
           path: iossimulator/
+          retention-days: 30
+          if-no-files-found: error
+
+  # ── iOS Simulator x64 ───────────────────────────────────────────────────
+  # Cross-compiles x86_64 simulator binaries on an Apple Silicon (arm64) runner.
+  # The toolchain sets CMAKE_OSX_ARCHITECTURES=x86_64 via the iphonesimulator
+  # SDK, so -arch is explicit (never host-defaulted) - matches dotnet/runtime CI.
+  build-iossimulator-x64:
+    runs-on: macos-26
+    if: github.event.inputs.build_iossimulator_x64 == 'true'
+    steps:
+      - name: Checkout CoreClrSDK
+        uses: actions/checkout@v4
+
+      - name: Clone dotnet/runtime
+        run: |
+          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+
+      - name: Build CoreCLR (iOS Simulator x64)
+        run: |
+          cd dotnet-runtime
+          ./build.sh ${{ env.BUILD_SUBSET }} -os iossimulator -arch x64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Copy artifacts to SDK (iOS Simulator x64)
+        run: |
+          bash CopySDKFromSrc.sh $(pwd)/dotnet-runtime iossimulatorx64 ${{ github.event.inputs.build_type || 'Debug' }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreClrSDK-iOS-Simulator-X64-${{ github.event.inputs.build_type || 'Debug' }}
+          path: iossimulatorx64/
           retention-days: 30
           if-no-files-found: error

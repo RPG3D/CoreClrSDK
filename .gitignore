@@ -6,6 +6,7 @@ macos/
 android/
 ios/
 iossimulator/
+iossimulatorx64/
 
 # IDE
 .idea/

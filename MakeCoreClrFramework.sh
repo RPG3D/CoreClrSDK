@@ -14,7 +14,7 @@
 #   ./MakeCoreClrFramework.sh <platform> <dylibs-dir> <output-lib-dir>
 #
 # Arguments:
-#   platform          ios | iossimulator
+#   platform          ios | iossimulator | iossimulatorx64
 #   dylibs-dir        Path to directory containing native .dylib files
 #   output-lib-dir    Path to SDK lib/ directory where .embeddedframework.zip goes
 #
@@ -29,12 +29,12 @@ OUTPUT_DIR="${3:-}"
 
 if [[ -z "$PLATFORM" || -z "$DYLIBS_DIR" || -z "$OUTPUT_DIR" ]]; then
     echo "Usage: $0 <platform> <dylibs-dir> <output-lib-dir>" >&2
-    echo "  platform: ios | iossimulator" >&2
+    echo "  platform: ios | iossimulator | iossimulatorx64" >&2
     exit 1
 fi
 
-if [[ "$PLATFORM" != "ios" && "$PLATFORM" != "iossimulator" ]]; then
-    echo "Error: platform must be 'ios' or 'iossimulator', got '$PLATFORM'" >&2
+if [[ "$PLATFORM" != "ios" && "$PLATFORM" != "iossimulator" && "$PLATFORM" != "iossimulatorx64" ]]; then
+    echo "Error: platform must be 'ios', 'iossimulator', or 'iossimulatorx64', got '$PLATFORM'" >&2
     exit 1
 fi
 
