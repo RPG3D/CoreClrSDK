@@ -43,11 +43,11 @@ public class CoreClrSDK : ModuleRules
         {
             string bclSdkDir = Target.Platform == UnrealTargetPlatform.Android
                 ? "Android"
-                : (Target.Architecture == UnrealArch.IOSSimulator ? "iOSSimulator" : "iOS");
+                : (Target.Architecture == UnrealArch.IOSSimulator ? "IOSSimulator" : "IOS");
 
             string contentPakDir = Target.Platform == UnrealTargetPlatform.Android
                 ? "Android"
-                : "iOS";
+                : "IOS";
                 
             string bclRuntimeDir = Path.Combine(sdkRoot, bclSdkDir, "runtime");
 
@@ -63,7 +63,7 @@ public class CoreClrSDK : ModuleRules
             }
 
             // Project managed DLLs + LoadOrder.json - placed into Content/Managed/<Platform>/
-            // by BuildManagedCode.bat; stage them UFS (inside PAK, hot-updatable). Same dir
+            // by PackageProjectMobile; stage them UFS (inside PAK, hot-updatable). Same dir
             // as BCL (unified PAK layout) but different source files, so no overlap.
             string projectDir = Target.ProjectFile != null
                 ? Path.GetDirectoryName(Target.ProjectFile.FullName)!
@@ -100,13 +100,37 @@ public class CoreClrSDK : ModuleRules
         if (Target.Platform == UnrealTargetPlatform.IOS)
         {
             bool bIsSimulator = Target.Architecture == UnrealArch.IOSSimulator;
-            string platformDir = bIsSimulator ? "iOSSimulator" : "iOS";
+            string platformDir = bIsSimulator ? "IOSSimulator" : "IOS";
             string nativeLibDir = Path.Combine(sdkRoot, platformDir, "lib");
 
+            string[] iosRuntimeDylibs =
+            {
+                "libcoreclr.dylib",
+                "libclrjit.dylib",
+                "libclrinterpreter.dylib",
+                "libSystem.Native.dylib",
+                "libSystem.IO.Compression.Native.dylib",
+                "libSystem.Net.Security.Native.dylib",
+                "libSystem.Security.Cryptography.Native.Apple.dylib",
+                "libSystem.Globalization.Native.dylib",
+            };
+            
            string coreclrDylibPath = Path.Combine(nativeLibDir, "libcoreclr.dylib");
            if (File.Exists(coreclrDylibPath))
            {
                PublicAdditionalLibraries.Add(coreclrDylibPath);
+           }
+
+           foreach (string dylibName in iosRuntimeDylibs)
+           {
+               string dylibPath = Path.Combine(nativeLibDir, dylibName);
+               if (File.Exists(dylibPath))
+               {
+                   RuntimeDependencies.Add(
+                       $"$(BinaryOutputDir)/{dylibName}",
+                       dylibPath,
+                       StagedFileType.NonUFS);
+               }
            }
         }
     }

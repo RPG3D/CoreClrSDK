@@ -41,6 +41,11 @@ on:
         required: false
         type: boolean
         default: true
+      runtime_commit:
+        description: 'dotnet/runtime commit SHA (empty = latest release/10.0 tip)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
@@ -64,7 +69,15 @@ jobs:
       - name: Clone dotnet/runtime
         run: |
           git config --system core.longpaths true
-          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
+          if [ -n "$RUNTIME_COMMIT" ]; then
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            cd dotnet-runtime
+            git fetch --depth=100 origin "$RUNTIME_COMMIT"
+            git checkout "$RUNTIME_COMMIT"
+          else
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          fi
         shell: bash
 
       - name: Build CoreCLR (Windows x64)
@@ -104,7 +117,15 @@ jobs:
 
       - name: Clone dotnet/runtime
         run: |
-          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
+          if [ -n "$RUNTIME_COMMIT" ]; then
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            cd dotnet-runtime
+            git fetch --depth=100 origin "$RUNTIME_COMMIT"
+            git checkout "$RUNTIME_COMMIT"
+          else
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          fi
 
       - name: Build CoreCLR (Linux x64)
         run: |
@@ -133,7 +154,15 @@ jobs:
 
       - name: Clone dotnet/runtime
         run: |
-          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
+          if [ -n "$RUNTIME_COMMIT" ]; then
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            cd dotnet-runtime
+            git fetch --depth=100 origin "$RUNTIME_COMMIT"
+            git checkout "$RUNTIME_COMMIT"
+          else
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          fi
 
       - name: Build CoreCLR (macOS arm64)
         run: |
@@ -165,7 +194,15 @@ jobs:
 
       - name: Clone dotnet/runtime
         run: |
-          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
+          if [ -n "$RUNTIME_COMMIT" ]; then
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            cd dotnet-runtime
+            git fetch --depth=100 origin "$RUNTIME_COMMIT"
+            git checkout "$RUNTIME_COMMIT"
+          else
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          fi
 
       - name: Build CoreCLR (Android arm64)
         run: |
@@ -194,7 +231,15 @@ jobs:
 
       - name: Clone dotnet/runtime
         run: |
-          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
+          if [ -n "$RUNTIME_COMMIT" ]; then
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            cd dotnet-runtime
+            git fetch --depth=100 origin "$RUNTIME_COMMIT"
+            git checkout "$RUNTIME_COMMIT"
+          else
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          fi
 
       - name: Build CoreCLR (iOS Device)
         run: |
@@ -223,7 +268,15 @@ jobs:
 
       - name: Clone dotnet/runtime
         run: |
-          git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
+          if [ -n "$RUNTIME_COMMIT" ]; then
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            cd dotnet-runtime
+            git fetch --depth=100 origin "$RUNTIME_COMMIT"
+            git checkout "$RUNTIME_COMMIT"
+          else
+            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+          fi
 
       - name: Build CoreCLR (iOS Simulator)
         run: |
