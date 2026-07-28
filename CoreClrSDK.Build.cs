@@ -41,22 +41,22 @@ public class CoreClrSDK : ModuleRules
         if (Target.Platform == UnrealTargetPlatform.Android
             || Target.Platform == UnrealTargetPlatform.IOS)
         {
-            string platformDir = Target.Platform == UnrealTargetPlatform.Android
+            string bclSdkDir = Target.Platform == UnrealTargetPlatform.Android
                 ? "Android"
                 : (Target.Architecture == UnrealArch.IOSSimulator ? "iOSSimulator" : "iOS");
 
-            // BCL managed DLLs -> staged UFS into Content/Managed/<Platform>/ alongside
-            // the project DLLs (unified PAK dir). BCL source is the plugin SDK runtime
-            // dir (CoreClrSDK/<Platform>/runtime); enumerate each .dll explicitly so it
-            // lands in the unified dir under its own name (the old "..." glob matched
-            // nothing and staged zero BCL).
-            string bclRuntimeDir = Path.Combine(sdkRoot, platformDir, "runtime");
+            string contentPakDir = Target.Platform == UnrealTargetPlatform.Android
+                ? "Android"
+                : "iOS";
+                
+            string bclRuntimeDir = Path.Combine(sdkRoot, bclSdkDir, "runtime");
+
             if (Directory.Exists(bclRuntimeDir))
             {
                 foreach (string bclDll in Directory.GetFiles(bclRuntimeDir, "*.dll"))
                 {
                     RuntimeDependencies.Add(
-                        $"$(ProjectDir)/Content/Managed/{platformDir}/{Path.GetFileName(bclDll)}",
+                        $"$(ProjectDir)/Content/Managed/{contentPakDir}/{Path.GetFileName(bclDll)}",
                         bclDll,
                         StagedFileType.UFS);
                 }
@@ -70,7 +70,7 @@ public class CoreClrSDK : ModuleRules
                 : null;
             if (projectDir != null)
             {
-                string managedContentDir = Path.Combine(projectDir, "Content", "Managed", platformDir);
+                string managedContentDir = Path.Combine(projectDir, "Content", "Managed", contentPakDir);
                 if (Directory.Exists(managedContentDir))
                 {
                     RuntimeDependencies.Add(Path.Combine(managedContentDir, "*.dll"), StagedFileType.UFS);
