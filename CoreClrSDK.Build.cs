@@ -103,35 +103,23 @@ public class CoreClrSDK : ModuleRules
             string platformDir = bIsSimulator ? "IOSSimulator" : "IOS";
             string nativeLibDir = Path.Combine(sdkRoot, platformDir, "lib");
 
-            string[] iosRuntimeDylibs =
+            // iOS requires dynamic libraries in an embedded framework (scatter dylibs
+            // in .app root is rejected by App Store / fails device install). All CoreCLR
+            // native dylibs are packaged into a single CoreCLR.embeddedframework.zip by
+            // MakeCoreClrFramework.sh. LinkAndCopy links coreclr_* symbols from the
+            // framework binary and copies the whole framework into .app/Frameworks/.
+            string frameworkZip = Path.Combine(nativeLibDir, "CoreCLR.embeddedframework.zip");
+            if (!File.Exists(frameworkZip))
             {
-                "libcoreclr.dylib",
-                "libclrjit.dylib",
-                "libclrinterpreter.dylib",
-                "libSystem.Native.dylib",
-                "libSystem.IO.Compression.Native.dylib",
-                "libSystem.Net.Security.Native.dylib",
-                "libSystem.Security.Cryptography.Native.Apple.dylib",
-                "libSystem.Globalization.Native.dylib",
-            };
-            
-           string coreclrDylibPath = Path.Combine(nativeLibDir, "libcoreclr.dylib");
-           if (File.Exists(coreclrDylibPath))
-           {
-               PublicAdditionalLibraries.Add(coreclrDylibPath);
-           }
-
-           foreach (string dylibName in iosRuntimeDylibs)
-           {
-               string dylibPath = Path.Combine(nativeLibDir, dylibName);
-               if (File.Exists(dylibPath))
-               {
-                   RuntimeDependencies.Add(
-                       $"$(BinaryOutputDir)/{dylibName}",
-                       dylibPath,
-                       StagedFileType.NonUFS);
-               }
-           }
+                throw new BuildException(
+                    $"CoreCLR.embeddedframework.zip not found at {frameworkZip}. " +
+                    "Run MakeCoreClrFramework.sh to build the single iOS framework.");
+            }
+            PublicAdditionalFrameworks.Add(new Framework(
+                "CoreCLR",
+                frameworkZip,
+                Framework.FrameworkMode.LinkAndCopy,
+                null));
         }
     }
 }
