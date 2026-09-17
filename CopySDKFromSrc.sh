@@ -92,7 +92,7 @@ esac
 CORECLR_DIR="$SRC_ARTIFACTS/bin/coreclr/$CORECLR_TRIPLE"
 RUNTIME_PACK="$SRC_ARTIFACTS/bin/microsoft.netcore.app.runtime.$RUNTIME_RID/$BUILD_TYPE/runtimes/$RUNTIME_RID"
 RUNTIME_PACK_NATIVE="$RUNTIME_PACK/native"
-RUNTIME_PACK_MANAGED="$RUNTIME_PACK/lib/net10.0"
+RUNTIME_PACK_MANAGED="$RUNTIME_PACK/lib/net11.0"
 
 echo ">>> Copying artifacts into SDK directory..."
 rm -rf "$DEST"

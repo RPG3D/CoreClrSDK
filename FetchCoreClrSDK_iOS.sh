@@ -21,14 +21,14 @@
 #     ./eng/build.sh --os iossimulator --arch arm64 --configuration Debug --subset Clr.Native
 #
 # Usage:
-#   ./FetchCoreClrSDK_iOS.sh                                    # default DotNet10 path
-#   ./FetchCoreClrSDK_iOS.sh /path/to/DotNet                    # explicit DotNet10 path
+#   ./FetchCoreClrSDK_iOS.sh                                    # default DotNet11 path
+#   ./FetchCoreClrSDK_iOS.sh /path/to/DotNet                    # explicit DotNet11 path
 #
-# Reference: IOSClrDemo/build.sh (Step 0 + Step 2) — DotNet10 adaptation
+# Reference: IOSClrDemo/build.sh (Step 0 + Step 2) — DotNet11 adaptation
 
 set -euo pipefail
 
-DOTNET10_ROOT="${1:-/Users/admin/Documents/Code/DotNet}"
+DOTNET11_ROOT="${1:-/Users/admin/Documents/Code/DotNet}"
 
 # Resolve the SDK root (directory containing this script).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,28 +38,28 @@ LIB_DIR="$PLATFORM_DIR/lib"
 RUNTIME_DIR="$PLATFORM_DIR/runtime"
 
 echo "=== FetchCoreClrSDK_iOS: DotNet10 (iossimulator-arm64) ==="
-echo "DotNet10 root: $DOTNET10_ROOT"
+echo "DotNet11 root: $DOTNET11_ROOT"
 echo "SDK root: $SDK_ROOT"
 
 # ── Source paths (matching IOSClrDemo/build.sh, adapted for DotNet10) ────
 # Native dylibs from the self-consistent runtime-pack artifacts.
-RUNTIME_PACK_ARTIFACTS="${DOTNET10_ROOT}/artifacts/bin/microsoft.netcore.app.runtime.iossimulator-arm64/Debug"
+RUNTIME_PACK_ARTIFACTS="${DOTNET11_ROOT}/artifacts/bin/microsoft.netcore.app.runtime.iossimulator-arm64/Debug"
 NATIVE_SRC="${RUNTIME_PACK_ARTIFACTS}/runtimes/iossimulator-arm64/native"
 
 # CoreCLR native dylibs (libcoreclr, libclrjit, libclrinterpreter)
-CORECLR_NATIVE="${DOTNET10_ROOT}/artifacts/bin/coreclr/iossimulator.arm64.Debug"
+CORECLR_NATIVE="${DOTNET11_ROOT}/artifacts/bin/coreclr/iossimulator.arm64.Debug"
 
 # CoreCLR IL directory — pure IL System.Private.CoreLib.dll
 # Using this instead of the testhost BCL version avoids System.__Canon loading failures.
 CORECLR_IL="${CORECLR_NATIVE}/IL"
 
 # BCL from the testhost shared framework (version-matched to native runtime).
-BCL_SRC="${DOTNET10_ROOT}/artifacts/bin/testhost/net10.0-iossimulator-Debug-arm64/shared/Microsoft.NETCore.App/10.0.10"
+BCL_SRC="${DOTNET11_ROOT}/artifacts/bin/testhost/net11.0-iossimulator-Debug-arm64/shared/Microsoft.NETCore.App/11.0.0-rc.1"
 
 if [ ! -f "${CORECLR_NATIVE}/libcoreclr.dylib" ]; then
     echo "  ERROR: libcoreclr.dylib not found at ${CORECLR_NATIVE}"
-    echo "  Build DotNet10 CoreCLR first:"
-    echo "    cd ${DOTNET10_ROOT}"
+    echo "  Build DotNet11 CoreCLR first:"
+    echo "    cd ${DOTNET11_ROOT}"
     echo "    ./eng/build.sh --os iossimulator --arch arm64 --configuration Debug --subset Clr.Native"
     exit 1
 fi
@@ -121,6 +121,6 @@ echo "Building .embeddedframework.zip files..."
 bash "$SCRIPT_DIR/MakeCoreClrFramework.sh" iossimulator "$LIB_DIR" "$LIB_DIR"
 
 echo ""
-echo "=== Done. CoreClrSDK populated for iossimulator-arm64 (DotNet10). ==="
+echo "=== Done. CoreClrSDK populated for iossimulator-arm64 (DotNet11). ==="
 echo "iOSSimulator/lib:     $(ls -1 "$LIB_DIR"/*.dylib 2>/dev/null | wc -l | tr -d ' ') dylibs, $(ls -1 "$LIB_DIR"/*.embeddedframework.zip 2>/dev/null | wc -l | tr -d ' ') framework zips"
 echo "iOSSimulator/runtime: ${DLL_COUNT} BCL .dll files"

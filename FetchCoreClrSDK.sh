@@ -8,13 +8,13 @@
 #
 # Usage:
 #   ./FetchCoreClrSDK.sh              # default version (see RUNTIME_VERSION below)
-#   ./FetchCoreClrSDK.sh 10.0.9       # explicit version
+#   ./FetchCoreClrSDK.sh 11.0.0-rc.1.26425.128       # explicit version
 #
 # Requirements: curl (or wget) + unzip on PATH.
 
 set -euo pipefail
 
-RUNTIME_VERSION="${1:-10.0.9}"
+RUNTIME_VERSION="${1:-11.0.0-rc.1.26425.128}"
 NUGET_URL="https://globalcdn.nuget.org/packages/microsoft.netcore.app.runtime.android-arm64.${RUNTIME_VERSION}.nupkg"
 
 # Resolve the SDK root (directory containing this script).
@@ -59,7 +59,7 @@ ls -1 "$LIB_DIR"
 # BCL managed .dll → Android/runtime/.
 mkdir -p "$RUNTIME_DIR"
 rm -f "$RUNTIME_DIR"/*.dll
-cp "$WORK_DIR"/extracted/runtimes/android-arm64/lib/net10.0/*.dll "$RUNTIME_DIR"/
+cp "$WORK_DIR"/extracted/runtimes/android-arm64/lib/net11.0/*.dll "$RUNTIME_DIR"/
 DLL_COUNT=$(ls -1 "$RUNTIME_DIR"/*.dll | wc -l)
 echo "Installed $DLL_COUNT BCL .dll to $RUNTIME_DIR"
 

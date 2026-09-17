@@ -8,14 +8,14 @@ REM to populate the SDK. Mirrors how MonoSDK is populated from GitHub Releases.
 REM
 REM Usage:
 REM   FetchCoreClrSDK.bat              (default version, see RUNTIME_VERSION below)
-REM   FetchCoreClrSDK.bat 10.0.9       (explicit version)
+REM   FetchCoreClrSDK.bat 11.0.0-rc.1.26425.128       (explicit version)
 REM
 REM Requirements: PowerShell (Invoke-WebRequest / Expand-Archive) - bundled on Win10+.
 
 setlocal enabledelayedexpansion
 
 set "RUNTIME_VERSION=%~1"
-if "%RUNTIME_VERSION%"=="" set "RUNTIME_VERSION=10.0.9"
+if "%RUNTIME_VERSION%"=="" set "RUNTIME_VERSION=11.0.0-rc.1.26425.128"
 
 set "NUGET_URL=https://globalcdn.nuget.org/packages/microsoft.netcore.app.runtime.android-arm64.%RUNTIME_VERSION%.nupkg"
 
@@ -56,7 +56,7 @@ echo Installed native .so to %LIB_DIR%
 REM BCL managed .dll -> Android\runtime\.
 if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
 del /Q "%RUNTIME_DIR%\*.dll" 2>nul
-copy /Y "%WORK_DIR%\extracted\runtimes\android-arm64\lib\net10.0\*.dll" "%RUNTIME_DIR%\" >nul
+copy /Y "%WORK_DIR%\extracted\runtimes\android-arm64\lib\net11.0\*.dll" "%RUNTIME_DIR%\" >nul
 
 REM Count installed DLLs.
 set "DLL_COUNT=0"

@@ -100,7 +100,7 @@ if exist "%RUNTIME_PACK_NATIVE%" (
 rem 3. BCL managed DLLs + PDBs (robocopy /E entire directory, like MonoSDK)
 echo ^>^>^> Copying BCL managed DLLs + PDBs...
 
-set "RUNTIME_PACK_MANAGED=%SRC_ARTIFACTS%\bin\microsoft.netcore.app.runtime.%RUNTIME_RID%\%BUILD_TYPE%\runtimes\%RUNTIME_RID%\lib\net10.0"
+set "RUNTIME_PACK_MANAGED=%SRC_ARTIFACTS%\bin\microsoft.netcore.app.runtime.%RUNTIME_RID%\%BUILD_TYPE%\runtimes\%RUNTIME_RID%\lib\net11.0"
 if exist "%RUNTIME_PACK_MANAGED%" (
     robocopy "%RUNTIME_PACK_MANAGED%" "%DEST%\runtime" /E /NFL /NDL
     if errorlevel 8 set "ROBOCOPY_ERROR=1"
@@ -111,7 +111,7 @@ if exist "%RUNTIME_PACK_MANAGED%" (
 
 rem 4. Overwrite System.Private.CoreLib.dll with pure-IL version
 rem Falls back to runtime-pack-native copy when CoreLib is missing from managed dir
-rem (.NET 10 Windows puts ReadyToRun CoreLib in native/, not managed lib/net10.0)
+rem (.NET 10 Windows puts ReadyToRun CoreLib in native/, not managed lib/net11.0)
 set "CORECLR_IL=%CORECLR_DIR%\IL\System.Private.CoreLib.dll"
 set "SPC_DEST=%DEST%\runtime\System.Private.CoreLib.dll"
 set "SPC_PDB_DEST=%DEST%\runtime\System.Private.CoreLib.pdb"
