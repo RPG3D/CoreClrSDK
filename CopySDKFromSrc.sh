@@ -42,6 +42,9 @@ esac
 
 SDK_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Pinned runtime TFM — single source of truth: DotNetRuntime.version.
+DOTNET_TFM="$(grep -E '^DOTNET_TFM=' "$SDK_DIR/DotNetRuntime.version" | cut -d= -f2- | tr -d '\r')"
+
 echo "=== CopySDKFromSrc ==="
 echo "  Source    : $DOTNET_SRC"
 echo "  Platform  : $PLATFORM"
@@ -92,7 +95,7 @@ esac
 CORECLR_DIR="$SRC_ARTIFACTS/bin/coreclr/$CORECLR_TRIPLE"
 RUNTIME_PACK="$SRC_ARTIFACTS/bin/microsoft.netcore.app.runtime.$RUNTIME_RID/$BUILD_TYPE/runtimes/$RUNTIME_RID"
 RUNTIME_PACK_NATIVE="$RUNTIME_PACK/native"
-RUNTIME_PACK_MANAGED="$RUNTIME_PACK/lib/net11.0"
+RUNTIME_PACK_MANAGED="$RUNTIME_PACK/lib/$DOTNET_TFM"
 
 echo ">>> Copying artifacts into SDK directory..."
 rm -rf "$DEST"

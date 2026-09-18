@@ -37,6 +37,10 @@ PLATFORM_DIR="$SDK_ROOT/iOSSimulator"
 LIB_DIR="$PLATFORM_DIR/lib"
 RUNTIME_DIR="$PLATFORM_DIR/runtime"
 
+# Pinned runtime version/TFM — single source of truth: DotNetRuntime.version.
+DOTNET_TFM="$(grep -E '^DOTNET_TFM=' "$SDK_ROOT/DotNetRuntime.version" | cut -d= -f2- | tr -d '\r')"
+RUNTIME_VERSION="$(grep -E '^RUNTIME_VERSION=' "$SDK_ROOT/DotNetRuntime.version" | cut -d= -f2- | tr -d '\r')"
+
 echo "=== FetchCoreClrSDK_iOS: DotNet10 (iossimulator-arm64) ==="
 echo "DotNet11 root: $DOTNET11_ROOT"
 echo "SDK root: $SDK_ROOT"
@@ -54,7 +58,7 @@ CORECLR_NATIVE="${DOTNET11_ROOT}/artifacts/bin/coreclr/iossimulator.arm64.Debug"
 CORECLR_IL="${CORECLR_NATIVE}/IL"
 
 # BCL from the testhost shared framework (version-matched to native runtime).
-BCL_SRC="${DOTNET11_ROOT}/artifacts/bin/testhost/net11.0-iossimulator-Debug-arm64/shared/Microsoft.NETCore.App/11.0.0-rc.1"
+BCL_SRC="${DOTNET11_ROOT}/artifacts/bin/testhost/${DOTNET_TFM}-iossimulator-Debug-arm64/shared/Microsoft.NETCore.App/${RUNTIME_VERSION}"
 
 if [ ! -f "${CORECLR_NATIVE}/libcoreclr.dylib" ]; then
     echo "  ERROR: libcoreclr.dylib not found at ${CORECLR_NATIVE}"

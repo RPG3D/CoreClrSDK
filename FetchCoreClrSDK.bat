@@ -15,13 +15,16 @@ REM Requirements: PowerShell (Invoke-WebRequest / Expand-Archive) - bundled on W
 setlocal enabledelayedexpansion
 
 set "RUNTIME_VERSION=%~1"
-if "%RUNTIME_VERSION%"=="" set "RUNTIME_VERSION=11.0.0-rc.1.26425.128"
-
-set "NUGET_URL=https://globalcdn.nuget.org/packages/microsoft.netcore.app.runtime.android-arm64.%RUNTIME_VERSION%.nupkg"
 
 REM SDK root = directory of this script.
 set "SDK_ROOT=%~dp0"
 if "%SDK_ROOT:~-1%"=="\" set "SDK_ROOT=%SDK_ROOT:~0,-1%"
+
+REM Pinned runtime version/TFM — single source of truth: DotNetRuntime.version.
+for /f "usebackq tokens=1,* delims==" %%a in ("%SDK_ROOT%\DotNetRuntime.version") do set "%%a=%%b"
+if "%RUNTIME_VERSION%"=="" set "RUNTIME_VERSION=11.0.0-rc.1.26425.128"
+
+set "NUGET_URL=https://globalcdn.nuget.org/packages/microsoft.netcore.app.runtime.android-arm64.%RUNTIME_VERSION%.nupkg"
 set "LIB_DIR=%SDK_ROOT%\Android\lib"
 set "RUNTIME_DIR=%SDK_ROOT%\Android\runtime"
 set "WORK_DIR=%SDK_ROOT%\..\.FetchCoreClrSDK_tmp"
@@ -56,7 +59,7 @@ echo Installed native .so to %LIB_DIR%
 REM BCL managed .dll -> Android\runtime\.
 if not exist "%RUNTIME_DIR%" mkdir "%RUNTIME_DIR%"
 del /Q "%RUNTIME_DIR%\*.dll" 2>nul
-copy /Y "%WORK_DIR%\extracted\runtimes\android-arm64\lib\net11.0\*.dll" "%RUNTIME_DIR%\" >nul
+copy /Y "%WORK_DIR%\extracted\runtimes\android-arm64\lib\%DOTNET_TFM%\*.dll" "%RUNTIME_DIR%\" >nul
 
 REM Count installed DLLs.
 set "DLL_COUNT=0"

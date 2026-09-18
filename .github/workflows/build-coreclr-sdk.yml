@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       runtime_ref:
-        description: 'dotnet/runtime ref (tag, branch or sha)'
+        description: 'dotnet/runtime ref (tag, branch or sha) — keep in sync with DotNetRuntime.version'
         default: 'v11.0.0-rc.1.26425.128'
         required: true
       build_config:

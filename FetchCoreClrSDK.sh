@@ -14,14 +14,18 @@
 
 set -euo pipefail
 
-RUNTIME_VERSION="${1:-11.0.0-rc.1.26425.128}"
-NUGET_URL="https://globalcdn.nuget.org/packages/microsoft.netcore.app.runtime.android-arm64.${RUNTIME_VERSION}.nupkg"
-
 # Resolve the SDK root (directory containing this script).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_ROOT="$SCRIPT_DIR"
 LIB_DIR="$SDK_ROOT/Android/lib"
 RUNTIME_DIR="$SDK_ROOT/Android/runtime"
+
+# Pinned runtime version/TFM — single source of truth: DotNetRuntime.version.
+RUNTIME_VERSION="$(grep -E '^RUNTIME_VERSION=' "$SDK_ROOT/DotNetRuntime.version" | cut -d= -f2- | tr -d '\r')"
+DOTNET_TFM="$(grep -E '^DOTNET_TFM=' "$SDK_ROOT/DotNetRuntime.version" | cut -d= -f2- | tr -d '\r')"
+RUNTIME_VERSION="${1:-$RUNTIME_VERSION}"
+
+NUGET_URL="https://globalcdn.nuget.org/packages/microsoft.netcore.app.runtime.android-arm64.${RUNTIME_VERSION}.nupkg"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -59,7 +63,7 @@ ls -1 "$LIB_DIR"
 # BCL managed .dll → Android/runtime/.
 mkdir -p "$RUNTIME_DIR"
 rm -f "$RUNTIME_DIR"/*.dll
-cp "$WORK_DIR"/extracted/runtimes/android-arm64/lib/net11.0/*.dll "$RUNTIME_DIR"/
+cp "$WORK_DIR"/extracted/runtimes/android-arm64/lib/${DOTNET_TFM}/*.dll "$RUNTIME_DIR"/
 DLL_COUNT=$(ls -1 "$RUNTIME_DIR"/*.dll | wc -l)
 echo "Installed $DLL_COUNT BCL .dll to $RUNTIME_DIR"
 

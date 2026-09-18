@@ -30,6 +30,9 @@ set "DOTNET_SRC=%~f1"
 set "SDK_DIR=%~dp0"
 if "%SDK_DIR:~-1%"=="\" set "SDK_DIR=%SDK_DIR:~0,-1%"
 
+rem Pinned runtime TFM — single source of truth: DotNetRuntime.version.
+for /f "usebackq tokens=1,* delims==" %%a in ("%SDK_DIR%\DotNetRuntime.version") do set "%%a=%%b"
+
 rem Build type: Debug (default) or Release
 set "BUILD_TYPE_RAW=%~2"
 if "%BUILD_TYPE_RAW%"=="" set "BUILD_TYPE_RAW=Debug"
@@ -100,7 +103,7 @@ if exist "%RUNTIME_PACK_NATIVE%" (
 rem 3. BCL managed DLLs + PDBs (robocopy /E entire directory, like MonoSDK)
 echo ^>^>^> Copying BCL managed DLLs + PDBs...
 
-set "RUNTIME_PACK_MANAGED=%SRC_ARTIFACTS%\bin\microsoft.netcore.app.runtime.%RUNTIME_RID%\%BUILD_TYPE%\runtimes\%RUNTIME_RID%\lib\net11.0"
+set "RUNTIME_PACK_MANAGED=%SRC_ARTIFACTS%\bin\microsoft.netcore.app.runtime.%RUNTIME_RID%\%BUILD_TYPE%\runtimes\%RUNTIME_RID%\lib\%DOTNET_TFM%"
 if exist "%RUNTIME_PACK_MANAGED%" (
     robocopy "%RUNTIME_PACK_MANAGED%" "%DEST%\runtime" /E /NFL /NDL
     if errorlevel 8 set "ROBOCOPY_ERROR=1"
