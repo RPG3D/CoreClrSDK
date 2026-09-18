@@ -53,7 +53,7 @@ jobs:
       - name: Build CoreCLR + libs (android arm64)
         working-directory: runtime-src
         run: |
-          ./build.sh clr.runtime+clr.alljits+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs \
+          ./build.sh clr.runtime+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs \
             -os android -arch arm64 -c ${{ inputs.build_config }}
 
       - name: Populate SDK (android)
