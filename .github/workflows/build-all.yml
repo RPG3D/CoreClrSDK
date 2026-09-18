@@ -247,10 +247,22 @@ jobs:
             git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
           fi
 
+      - name: Patch compression install (iOS device)
+        run: |
+          # .NET 11 extended the runtime-component install of the compression
+          # static lib to iOS, but the -Static target is not in the default build
+          # graph on ios device → cmake install fails with FILE_NOT_FOUND. Our SDK
+          # does not consume the .a (net10-proven); drop iOS from that condition
+          # to restore the net10 install behavior.
+          sed -i.bak 's/CLR_CMAKE_HOST_IOS OR //' \
+            dotnet-runtime/src/native/libs/System.IO.Compression.Native/CMakeLists.txt
+          grep -n "COMPONENT runtime" \
+            dotnet-runtime/src/native/libs/System.IO.Compression.Native/CMakeLists.txt | head -3
+
       - name: Build CoreCLR (iOS Device)
         run: |
           cd dotnet-runtime
-          ./build.sh ${{ env.BUILD_SUBSET }} -os ios -configuration ${{ github.event.inputs.build_type || 'Debug' }}
+          ./build.sh ${{ env.BUILD_SUBSET }} -os ios -arch arm64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
 
       - name: Copy artifacts to SDK (iOS)
         run: |
