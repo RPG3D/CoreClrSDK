@@ -27,7 +27,7 @@
 #
 # Usage:
 #   ./MakeCoreClrFramework.sh <platform> <dylibs-dir> <output-lib-dir>
-#   platform: ios | iossimulator
+#   platform: ios
 
 set -euo pipefail
 
@@ -37,12 +37,12 @@ OUTPUT_DIR="${3:-}"
 
 if [[ -z "$PLATFORM" || -z "$DYLIBS_DIR" || -z "$OUTPUT_DIR" ]]; then
     echo "Usage: $0 <platform> <dylibs-dir> <output-lib-dir>" >&2
-    echo "  platform: ios | iossimulator" >&2
+    echo "  platform: ios" >&2
     exit 1
 fi
 
-if [[ "$PLATFORM" != "ios" && "$PLATFORM" != "iossimulator" ]]; then
-    echo "Error: platform must be 'ios' or 'iossimulator', got '$PLATFORM'" >&2
+if [[ "$PLATFORM" != "ios" ]]; then
+    echo "Error: platform must be 'ios', got '$PLATFORM'" >&2
     exit 1
 fi
 

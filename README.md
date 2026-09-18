@@ -19,11 +19,10 @@ git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git 
 # Build for a specific platform
 ./BuildCoreClrSDK.sh ~/dotnet-runtime <platform> [build-type]
 
-# Platforms: win64 | linux | macos | android | ios | iossimulator
+# Platforms: win64 | linux | macos | android | ios
 # Build types: Debug (default) | Release
 
 # Example: iOS Simulator Debug
-./BuildCoreClrSDK.sh ~/dotnet-runtime iossimulator Debug
 ```
 
 Prerequisites: Visual Studio 2022 (Windows), Xcode (macOS/iOS), Android NDK (Android), CMake + Ninja.
@@ -34,7 +33,6 @@ Prerequisites: Visual Studio 2022 (Windows), Xcode (macOS/iOS), Android NDK (And
 and uploads the populated platform dirs as artifacts:
 
 - **android-arm64** (ubuntu, Release) — verified path; unpack `android/{lib,runtime}` over this dir
-- **iossimulator-arm64** (macos, Debug, experimental) — FetchCoreClrSDK_iOS.sh flow
 
 Defaults to `v11.0.0-rc.1.26425.128`. Artifacts replace the local build/fetch steps
 (git-ignored binaries are never committed).

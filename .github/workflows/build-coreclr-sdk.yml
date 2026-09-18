@@ -1,16 +1,13 @@
 name: build-coreclr-sdk
 
 # Builds CoreCLR for mobile targets from a pinned dotnet/runtime ref and
-# populates this SDK's platform directories (android/, iOSSimulator/),
-# then uploads them as artifacts to be unpacked over the git-ignored
-# binary dirs (same layout FetchCoreClrSDK.bat / FetchCoreClrSDK_iOS.sh
-# produce locally).
+# populates this SDK's platform directory (android/), then uploads it as an
+# artifact to be unpacked over the git-ignored binary dirs (same layout
+# FetchCoreClrSDK.bat produces locally).
 #
-# - android-arm64: mirrors the verified local Windows build
-#   (build.sh clr.runtime+...+libs -os android -arch arm64) — CopySDKFromSrc.sh
-#   populates android/{lib,runtime}.
-# - iossimulator-arm64 (EXPERIMENTAL on .NET 11): mirrors the verified net10
-#   mac flow (FetchCoreClrSDK_iOS.sh expects a Debug testhost build).
+# android-arm64 mirrors the verified local Windows build
+# (build.sh clr.runtime+...+libs -os android -arch arm64) — CopySDKFromSrc.sh
+# populates android/{lib,runtime}.
 
 on:
   workflow_dispatch:
@@ -71,37 +68,4 @@ jobs:
             android/lib/
             android/runtime/
             android/VERSION.txt
-          if-no-files-found: error
-
-  iossimulator-arm64:
-    name: iossimulator-arm64 (EXPERIMENTAL)
-    runs-on: macos-latest
-    timeout-minutes: 360
-    steps:
-      - name: Checkout SDK scripts
-        uses: actions/checkout@v4
-
-      - name: Checkout dotnet/runtime
-        run: |
-          git clone --depth 1 --branch "${{ inputs.runtime_ref }}" \
-            https://github.com/dotnet/runtime runtime-src
-
-      - name: Build CoreCLR + libs (iossimulator arm64, Debug)
-        working-directory: runtime-src
-        # Debug: FetchCoreClrSDK_iOS.sh expects the Debug testhost BCL layout.
-        run: |
-          ./build.sh clr.runtime+clr.alljits+clr.corelib+clr.nativecorelib+clr.tools+libs \
-            -os iossimulator -arch arm64 -c Debug
-
-      - name: Populate SDK (iossimulator)
-        run: |
-          bash FetchCoreClrSDK_iOS.sh "$GITHUB_WORKSPACE/runtime-src"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coreclr-sdk-iossimulator-arm64
-          path: |
-            iOSSimulator/lib/
-            iOSSimulator/runtime/
           if-no-files-found: error

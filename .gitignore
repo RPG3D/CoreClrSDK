@@ -5,7 +5,6 @@ linux/
 macos/
 android/
 ios/
-iossimulator/
 
 # IDE
 .idea/
@@ -14,3 +13,6 @@ iossimulator/
 
 # macOS
 .DS_Store
+*.bak
+*.bak20*
+Android.nuget-rc1-backup/

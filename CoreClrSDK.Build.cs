@@ -43,7 +43,7 @@ public class CoreClrSDK : ModuleRules
         {
             string bclSdkDir = Target.Platform == UnrealTargetPlatform.Android
                 ? "Android"
-                : (Target.Architecture == UnrealArch.IOSSimulator ? "IOSSimulator" : "IOS");
+                : "IOS";
 
             string contentPakDir = Target.Platform == UnrealTargetPlatform.Android
                 ? "Android"
@@ -99,8 +99,7 @@ public class CoreClrSDK : ModuleRules
 
         if (Target.Platform == UnrealTargetPlatform.IOS)
         {
-            bool bIsSimulator = Target.Architecture == UnrealArch.IOSSimulator;
-            string platformDir = bIsSimulator ? "IOSSimulator" : "IOS";
+            string platformDir = "IOS";
             string nativeLibDir = Path.Combine(sdkRoot, platformDir, "lib");
 
             // iOS requires dynamic libraries in an embedded framework (scatter dylibs

@@ -36,13 +36,8 @@ on:
         required: false
         type: boolean
         default: true
-      build_iossimulator:
-        description: 'Build iOS Simulator arm64'
-        required: false
-        type: boolean
-        default: true
       runtime_commit:
-        description: 'dotnet/runtime commit SHA (empty = latest release/10.0 tip)'
+        description: 'dotnet/runtime commit SHA (empty = latest release/11.0 tip)'
         required: false
         default: ''
         type: string
@@ -71,12 +66,12 @@ jobs:
           git config --system core.longpaths true
           RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
           if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
             cd dotnet-runtime
             git fetch --depth=100 origin "$RUNTIME_COMMIT"
             git checkout "$RUNTIME_COMMIT"
           else
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
           fi
         shell: bash
 
@@ -119,12 +114,12 @@ jobs:
         run: |
           RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
           if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
             cd dotnet-runtime
             git fetch --depth=100 origin "$RUNTIME_COMMIT"
             git checkout "$RUNTIME_COMMIT"
           else
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
           fi
 
       - name: Build CoreCLR (Linux x64)
@@ -156,12 +151,12 @@ jobs:
         run: |
           RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
           if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
             cd dotnet-runtime
             git fetch --depth=100 origin "$RUNTIME_COMMIT"
             git checkout "$RUNTIME_COMMIT"
           else
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
           fi
 
       - name: Build CoreCLR (macOS arm64)
@@ -196,12 +191,12 @@ jobs:
         run: |
           RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
           if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
             cd dotnet-runtime
             git fetch --depth=100 origin "$RUNTIME_COMMIT"
             git checkout "$RUNTIME_COMMIT"
           else
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
           fi
 
       - name: Build CoreCLR (Android arm64)
@@ -233,12 +228,12 @@ jobs:
         run: |
           RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
           if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
             cd dotnet-runtime
             git fetch --depth=100 origin "$RUNTIME_COMMIT"
             git checkout "$RUNTIME_COMMIT"
           else
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
+            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
           fi
 
       - name: Build CoreCLR (iOS Device)
@@ -259,38 +254,3 @@ jobs:
           if-no-files-found: error
 
   # ── iOS Simulator arm64 ─────────────────────────────────────────────────
-  build-iossimulator:
-    runs-on: macos-26
-    if: github.event.inputs.build_iossimulator == 'true'
-    steps:
-      - name: Checkout CoreClrSDK
-        uses: actions/checkout@v4
-
-      - name: Clone dotnet/runtime
-        run: |
-          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
-          if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
-            cd dotnet-runtime
-            git fetch --depth=100 origin "$RUNTIME_COMMIT"
-            git checkout "$RUNTIME_COMMIT"
-          else
-            git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git dotnet-runtime
-          fi
-
-      - name: Build CoreCLR (iOS Simulator)
-        run: |
-          cd dotnet-runtime
-          ./build.sh ${{ env.BUILD_SUBSET }} -os iossimulator -arch arm64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
-
-      - name: Copy artifacts to SDK (iOS Simulator)
-        run: |
-          bash CopySDKFromSrc.sh $(pwd)/dotnet-runtime iossimulator ${{ github.event.inputs.build_type || 'Debug' }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: CoreClrSDK-iOS-Simulator-${{ github.event.inputs.build_type || 'Debug' }}
-          path: iossimulator/
-          retention-days: 30
-          if-no-files-found: error

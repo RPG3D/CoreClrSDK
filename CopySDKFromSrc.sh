@@ -10,7 +10,7 @@
 #
 # Arguments:
 #   dotnet-src-dir   Path to the dotnet/runtime repository root (must be already built).
-#   platform         Target platform: linux | macos | android | ios | iossimulator
+#   platform         Target platform: linux | macos | android | ios
 #   build-type       Debug (default) | Release
 #
 # Note: Windows uses CopySDKFromSrc.bat, not this script.
@@ -54,7 +54,7 @@ echo ""
 
 # ── Validate platform ────────────────────────────────────────────────────────
 case "$PLATFORM" in
-    linux|macos|android|ios|iossimulator) ;;
+    linux|macos|android|ios) ;;
     *)
         echo "Error: unknown platform '$PLATFORM'." >&2
         exit 1
@@ -84,11 +84,6 @@ case "$PLATFORM" in
         CORECLR_TRIPLE="ios.arm64.$BUILD_TYPE"
         RUNTIME_RID="ios-arm64"
         DEST="$SDK_DIR/ios"
-        ;;
-    iossimulator)
-        CORECLR_TRIPLE="iossimulator.arm64.$BUILD_TYPE"
-        RUNTIME_RID="iossimulator-arm64"
-        DEST="$SDK_DIR/iossimulator"
         ;;
 esac
 
@@ -222,7 +217,7 @@ EOF
 
 # ── 3. iOS-specific: build .embeddedframework.zip ───────────────────────────
 case "$PLATFORM" in
-    ios|iossimulator)
+    ios)
         echo ""
         echo "--- iOS .embeddedframework.zip ---"
         bash "$SDK_DIR/MakeCoreClrFramework.sh" "$PLATFORM" "$DEST/lib" "$DEST/lib"
