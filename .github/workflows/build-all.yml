@@ -184,8 +184,19 @@ jobs:
       - name: Checkout CoreClrSDK
         uses: actions/checkout@v4
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Select Android NDK
+        run: |
+          set -euo pipefail
+          # The runner image ships the Android SDK (incl. NDK); setup-android@v3
+          # fails on it ('tools' package no longer exists), so just pick the NDK.
+          NDK_DIR="$(ls -d "$ANDROID_HOME"/ndk/* 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$NDK_DIR" ]; then
+            echo "No NDK found under ANDROID_HOME ($ANDROID_HOME)" >&2
+            exit 1
+          fi
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$NDK_DIR" >> "$GITHUB_ENV"
+          echo "Using NDK: $NDK_DIR"
 
       - name: Clone dotnet/runtime
         run: |
