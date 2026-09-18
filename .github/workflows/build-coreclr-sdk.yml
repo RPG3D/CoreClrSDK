@@ -1,0 +1,107 @@
+name: build-coreclr-sdk
+
+# Builds CoreCLR for mobile targets from a pinned dotnet/runtime ref and
+# populates this SDK's platform directories (android/, iOSSimulator/),
+# then uploads them as artifacts to be unpacked over the git-ignored
+# binary dirs (same layout FetchCoreClrSDK.bat / FetchCoreClrSDK_iOS.sh
+# produce locally).
+#
+# - android-arm64: mirrors the verified local Windows build
+#   (build.sh clr.runtime+...+libs -os android -arch arm64) — CopySDKFromSrc.sh
+#   populates android/{lib,runtime}.
+# - iossimulator-arm64 (EXPERIMENTAL on .NET 11): mirrors the verified net10
+#   mac flow (FetchCoreClrSDK_iOS.sh expects a Debug testhost build).
+
+on:
+  workflow_dispatch:
+    inputs:
+      runtime_ref:
+        description: 'dotnet/runtime ref (tag, branch or sha)'
+        default: 'v11.0.0-rc.1.26425.128'
+        required: true
+      build_config:
+        description: 'Build configuration for the android job'
+        default: 'Release'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  android-arm64:
+    name: android-arm64 (${{ inputs.build_config }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout SDK scripts
+        uses: actions/checkout@v4
+
+      - name: Checkout dotnet/runtime
+        run: |
+          git clone --depth 1 --branch "${{ inputs.runtime_ref }}" \
+            https://github.com/dotnet/runtime runtime-src
+
+      - name: Select Android NDK
+        run: |
+          set -euo pipefail
+          # Runners ship several NDKs; prefer r27+ (27.2 verified locally).
+          NDK_DIR="$(ls -d "$ANDROID_HOME"/ndk/* 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$NDK_DIR" ]; then
+            echo "No NDK found under ANDROID_HOME" >&2
+            exit 1
+          fi
+          echo "ANDROID_NDK_ROOT=$NDK_DIR" >> "$GITHUB_ENV"
+          echo "Using NDK: $NDK_DIR"
+
+      - name: Build CoreCLR + libs (android arm64)
+        working-directory: runtime-src
+        run: |
+          ./build.sh clr.runtime+clr.alljits+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs \
+            -os android -arch arm64 -c ${{ inputs.build_config }}
+
+      - name: Populate SDK (android)
+        run: |
+          bash CopySDKFromSrc.sh "$GITHUB_WORKSPACE/runtime-src" android ${{ inputs.build_config }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coreclr-sdk-android-arm64-${{ inputs.build_config }}
+          path: |
+            android/lib/
+            android/runtime/
+            android/VERSION.txt
+          if-no-files-found: error
+
+  iossimulator-arm64:
+    name: iossimulator-arm64 (EXPERIMENTAL)
+    runs-on: macos-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout SDK scripts
+        uses: actions/checkout@v4
+
+      - name: Checkout dotnet/runtime
+        run: |
+          git clone --depth 1 --branch "${{ inputs.runtime_ref }}" \
+            https://github.com/dotnet/runtime runtime-src
+
+      - name: Build CoreCLR + libs (iossimulator arm64, Debug)
+        working-directory: runtime-src
+        # Debug: FetchCoreClrSDK_iOS.sh expects the Debug testhost BCL layout.
+        run: |
+          ./build.sh clr.runtime+clr.alljits+clr.corelib+clr.nativecorelib+clr.tools+libs \
+            -os iossimulator -arch arm64 -c Debug
+
+      - name: Populate SDK (iossimulator)
+        run: |
+          bash FetchCoreClrSDK_iOS.sh "$GITHUB_WORKSPACE/runtime-src"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coreclr-sdk-iossimulator-arm64
+          path: |
+            iOSSimulator/lib/
+            iOSSimulator/runtime/
+          if-no-files-found: error

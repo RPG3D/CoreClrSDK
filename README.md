@@ -28,6 +28,17 @@ git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git 
 
 Prerequisites: Visual Studio 2022 (Windows), Xcode (macOS/iOS), Android NDK (Android), CMake + Ninja.
 
+## GitHub Actions
+
+`build-coreclr-sdk.yml` (workflow_dispatch) builds CoreCLR from a pinned dotnet/runtime ref
+and uploads the populated platform dirs as artifacts:
+
+- **android-arm64** (ubuntu, Release) — verified path; unpack `android/{lib,runtime}` over this dir
+- **iossimulator-arm64** (macos, Debug, experimental) — FetchCoreClrSDK_iOS.sh flow
+
+Defaults to `v11.0.0-rc.1.26425.128`. Artifacts replace the local build/fetch steps
+(git-ignored binaries are never committed).
+
 ## Build Subsets
 
 CoreCLR uses two build subsets (vs Mono's single `mono+libs`):
