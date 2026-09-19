@@ -50,7 +50,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BUILD_SUBSET: clr.runtime+clr.alljits+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs
+  BUILD_SUBSET: clr.runtime+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs
 
 jobs:
   # ── Windows x64 ──────────────────────────────────────────────────────────
