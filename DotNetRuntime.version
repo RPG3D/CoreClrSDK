@@ -1,3 +1,18 @@
 DOTNET_MAJOR=11
 DOTNET_TFM=net11.0
 RUNTIME_VERSION=11.0.0-rc.1.26425.128
+
+# Subsets the SDK actually consumes. CopySDKFromSrc.sh reads exactly these outputs:
+#   clr.runtime       libcoreclr / libclrjit / libclrinterpreter
+#   clr.corelib       pure-IL System.Private.CoreLib.dll (interpreter requirement)
+#   clr.nativecorelib R2R CoreLib input for the runtime pack
+#   libs.sfx          BCL managed assemblies + runtime-pack layout
+#   libs.native       System.Native / Compression / Globalization / Security shims
+#
+# Deliberately absent (all unused by the SDK, pure build time):
+#   clr.alljits       alt-JITs, only needed by JIT tests and ILCompiler
+#   clr.tools         ILCompiler / crossgen2 publish / ILVerify / ilasm / dotnet-pgo
+#   clr.packages      NuGet packaging of IL SDK / TestHost / ILAsm
+#   libs.oob          out-of-band libraries not in the shared framework
+#   libs.pretest      test infrastructure
+BUILD_SUBSET=clr.runtime+clr.corelib+clr.nativecorelib+libs.native+libs.sfx

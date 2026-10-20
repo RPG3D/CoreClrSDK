@@ -1,18 +1,33 @@
-# Platform binary directories (populated by BuildCoreClrSDK.sh or CI)
-# These are git-ignored — download from GitHub Releases instead.
-win64/
-linux/
-macos/
-android/
-ios/
+# CoreClrSDK .gitignore
+# This repo contains only build scripts, CI workflows and the public host ABI headers.
+# Pre-built SDKs are distributed via GitHub Releases.
+
+# Platform SDK directories, same <Platform>/<arch>/ convention as MonoSDK.
+# Only mobile ships a payload: desktop runs the upstream hostfxr host.
+Android/
+IOS/
+IOSSimulator/
+
+# Build artifacts
+dotnet-runtime/
+artifacts/
+out/
+
+# Temporary files
+*.tmp
+*.log
+*.bak*
+*.swp
+*.swo
+*~
+.DS_Store
 
 # IDE
+.vscode/
 .idea/
 .vs/
-.vscode/
+*.suo
+*.user
 
-# macOS
-.DS_Store
-*.bak
-*.bak20*
-Android.nuget-rc1-backup/
+# Test leftovers
+test-*/

@@ -1,11 +1,8 @@
 name: Package and Release CoreClrSDK
 
-# Downloads all platform SDKs from GitHub Actions artifacts
-# and packages them into a single ZIP file for release.
-#
-# Pattern: mirrors MonoSDK/.github/workflows/package-release.yml
-# Each platform downloads independently with --dir to wrap the flat
-# artifact contents (upload-artifact@v4 strips the directory prefix).
+# Downloads the mobile platform SDKs from GitHub Actions artifacts and packages them
+# into a single ZIP for release. Mirrors MonoSDK/.github/workflows/package-release.yml:
+# one table of <dir>:<artifact-base> entries, one download loop, one zip.
 
 on:
   workflow_dispatch:
@@ -18,13 +15,13 @@ on:
       build_type:
         description: 'Build type to package'
         required: true
-        default: 'Debug'
+        default: 'Release'
         type: choice
         options:
           - Debug
           - Release
       run_id:
-        description: 'Specific build-all workflow run ID (empty = latest successful)'
+        description: 'Specific build-all run ID (empty = latest successful run)'
         required: false
         default: ''
         type: string
@@ -32,6 +29,10 @@ on:
 permissions:
   contents: write
   actions: read
+
+env:
+  # Informational only: the artifacts already carry their own VERSION.txt.
+  RUNTIME_TAG: v11.0.0-rc.1.26425.128
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -51,240 +52,120 @@ jobs:
           sudo apt-get install -y gh jq
 
       - name: Authenticate GitHub CLI
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Download platform SDK artifacts
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'Release' }}"
+          RUN_ID="${{ github.event.inputs.run_id }}"
+          if [ -z "$RUN_ID" ]; then
+            RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=build-all.yml \
+              --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+          fi
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::No successful build-all.yml run found"
+            exit 1
+          fi
+          echo "Using build-all run $RUN_ID"
 
-      # ── Download each platform artifact into its own directory ──────────────
-      # MonoSDK pattern: gh run download --name <artifact> --dir <platform>/
-      # --dir wraps the flat artifact contents (lib/ runtime/ VERSION.txt)
-      # in the platform directory, so each platform is self-contained.
+          # <dest dir>:<artifact base name> - must match the uploads in build-all.yml.
+          # Every platform uses <Platform>/<arch>/, so this table is the only per-platform data.
+          ENTRIES="
+          Android/arm64:CoreClrSDK-Android-arm64
+          IOS/arm64:CoreClrSDK-iOS-arm64
+          IOSSimulator/arm64:CoreClrSDK-iOS-Simulator-arm64
+          "
 
-      - name: Download Win64 SDK artifact
-        run: |
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'Debug' }}"
-          echo ">>> Downloading Win64 SDK (${BUILD_TYPE})..."
-          INPUT_RUN_ID="${{ github.event.inputs.run_id }}"
-          if [ -n "$INPUT_RUN_ID" ]; then
-            RUN_ID="$INPUT_RUN_ID"
-          else
-            RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=build-all.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
-          fi
-          if [ -n "$RUN_ID" ]; then
-            rm -rf win64/
-            mkdir -p win64
-            gh run download $RUN_ID --repo ${{ github.repository }} --name "CoreClrSDK-Win64-${BUILD_TYPE}" --dir win64/
-            echo "  OK"
-          else
-            echo "  Not found"
-          fi
-          ls -la win64/ 2>/dev/null || echo "  win64/ not found"
-
-      - name: Download Linux SDK artifact
-        run: |
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'Debug' }}"
-          echo ">>> Downloading Linux SDK (${BUILD_TYPE})..."
-          INPUT_RUN_ID="${{ github.event.inputs.run_id }}"
-          if [ -n "$INPUT_RUN_ID" ]; then
-            RUN_ID="$INPUT_RUN_ID"
-          else
-            RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=build-all.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
-          fi
-          if [ -n "$RUN_ID" ]; then
-            rm -rf linux/
-            mkdir -p linux
-            gh run download $RUN_ID --repo ${{ github.repository }} --name "CoreClrSDK-Linux-x64-${BUILD_TYPE}" --dir linux/
-            echo "  OK"
-          else
-            echo "  Not found"
-          fi
-          ls -la linux/ 2>/dev/null || echo "  linux/ not found"
-
-      - name: Download macOS SDK artifact
-        run: |
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'Debug' }}"
-          echo ">>> Downloading macOS SDK (${BUILD_TYPE})..."
-          INPUT_RUN_ID="${{ github.event.inputs.run_id }}"
-          if [ -n "$INPUT_RUN_ID" ]; then
-            RUN_ID="$INPUT_RUN_ID"
-          else
-            RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=build-all.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
-          fi
-          if [ -n "$RUN_ID" ]; then
-            rm -rf macos/
-            mkdir -p macos
-            gh run download $RUN_ID --repo ${{ github.repository }} --name "CoreClrSDK-macOS-arm64-${BUILD_TYPE}" --dir macos/
-            echo "  OK"
-          else
-            echo "  Not found"
-          fi
-          ls -la macos/ 2>/dev/null || echo "  macos/ not found"
-
-      - name: Download Android SDK artifact
-        run: |
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'Debug' }}"
-          echo ">>> Downloading Android SDK (${BUILD_TYPE})..."
-          INPUT_RUN_ID="${{ github.event.inputs.run_id }}"
-          if [ -n "$INPUT_RUN_ID" ]; then
-            RUN_ID="$INPUT_RUN_ID"
-          else
-            RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=build-all.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
-          fi
-          if [ -n "$RUN_ID" ]; then
-            rm -rf android/
-            mkdir -p android
-            gh run download $RUN_ID --repo ${{ github.repository }} --name "CoreClrSDK-Android-arm64-${BUILD_TYPE}" --dir android/
-            echo "  OK"
-          else
-            echo "  Not found"
-          fi
-          ls -la android/ 2>/dev/null || echo "  android/ not found"
-
-      - name: Download iOS SDK artifact
-        run: |
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'Debug' }}"
-          echo ">>> Downloading iOS SDK (${BUILD_TYPE})..."
-          INPUT_RUN_ID="${{ github.event.inputs.run_id }}"
-          if [ -n "$INPUT_RUN_ID" ]; then
-            RUN_ID="$INPUT_RUN_ID"
-          else
-            RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=build-all.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
-          fi
-          if [ -n "$RUN_ID" ]; then
-            rm -rf ios/
-            mkdir -p ios
-            gh run download $RUN_ID --repo ${{ github.repository }} --name "CoreClrSDK-iOS-arm64-${BUILD_TYPE}" --dir ios/
-            echo "  OK"
-          else
-            echo "  Not found"
-          fi
-          ls -la ios/ 2>/dev/null || echo "  ios/ not found"
-
-      - name: Download iOS Simulator SDK artifact
-        run: |
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'Debug' }}"
-          echo ">>> Downloading iOS Simulator SDK (${BUILD_TYPE})..."
-          INPUT_RUN_ID="${{ github.event.inputs.run_id }}"
-          if [ -n "$INPUT_RUN_ID" ]; then
-            RUN_ID="$INPUT_RUN_ID"
-          else
-            RUN_ID=$(gh run list --repo ${{ github.repository }} --workflow=build-all.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
-          fi
-          if [ -n "$RUN_ID" ]; then
-            rm -rf iossimulator/
-            mkdir -p iossimulator
-            gh run download $RUN_ID --repo ${{ github.repository }} --name "CoreClrSDK-iOS-Simulator-${BUILD_TYPE}" --dir iossimulator/
-            echo "  OK"
-          else
-            echo "  Not found"
-          fi
-          ls -la iossimulator/ 2>/dev/null || echo "  iossimulator/ not found"
-
-      # ── Verify downloaded SDKs ──────────────────────────────────────────────
-
-      - name: Verify downloaded SDKs
-        run: |
-          echo "=== Platform directories ==="
-          for d in win64 linux macos android ios iossimulator; do
-            if [ -d "$d" ]; then
-              NATIVE=$(ls -1 $d/lib/* 2>/dev/null | wc -l | tr -d ' ')
-              BCL=$(ls -1 $d/runtime/*.dll 2>/dev/null | wc -l | tr -d ' ')
-              echo "  $d: ${NATIVE} native, ${BCL} BCL dlls"
+          for ENTRY in $ENTRIES; do
+            DIR="${ENTRY%%:*}"
+            BASE="${ENTRY##*:}"
+            ARTIFACT_NAME="${BASE}-${BUILD_TYPE}"
+            rm -rf "$DIR"
+            mkdir -p "$DIR"
+            if gh run download "$RUN_ID" --repo ${{ github.repository }} \
+                 --name "$ARTIFACT_NAME" --dir "$DIR"; then
+              echo "OK   $DIR  <- $ARTIFACT_NAME"
             else
-              echo "  $d: NOT FOUND"
+              echo "::error::Missing artifact $ARTIFACT_NAME in run $RUN_ID"
+              exit 1
             fi
           done
 
-      # ── Create package directory ────────────────────────────────────────────
+      - name: Verify downloaded SDKs
+        run: |
+          set -e
+          for DIR in Android/arm64 IOS/arm64 IOSSimulator/arm64; do
+            echo "=== $DIR ==="
+            test -f "$DIR/lib/libcoreclr.so" 2>/dev/null || test -f "$DIR/lib/libcoreclr.dylib"
+            test -d "$DIR/runtime"
+            COUNT=$(ls -1 "$DIR/runtime"/*.dll | wc -l)
+            echo "  $COUNT BCL dlls"
+            if [ "$COUNT" -lt 100 ]; then
+              echo "::error::$DIR looks incomplete"
+              exit 1
+            fi
+          done
 
       - name: Create package directory
         run: |
           mkdir -p package/CoreClrSDK
+          cp -Rf Android IOS IOSSimulator package/CoreClrSDK/
 
-          # Copy platform directories
-          for d in win64 linux macos android ios iossimulator; do
-            if [ -d "$d" ]; then
-              cp -Rf "$d" package/CoreClrSDK/
-            fi
-          done
+          # Build + copy scripts and UBT integration files
+          cp BuildCoreClrSDK.sh CopySDKFromSrc.sh MakeCoreClrFramework.sh \
+             FetchCoreClrSDK.sh FetchCoreClrSDK.bat \
+             DotNetRuntime.version CoreClrSDK.Build.cs CoreClrSDK_APL.xml \
+             README.md .gitignore package/CoreClrSDK/
 
-          # Copy build scripts
-          cp BuildCoreClrSDK.sh package/CoreClrSDK/ 2>/dev/null || true
-          cp BuildCoreClrSDK.bat package/CoreClrSDK/ 2>/dev/null || true
-          cp CopySDKFromSrc.sh package/CoreClrSDK/ 2>/dev/null || true
-          cp CopySDKFromSrc.bat package/CoreClrSDK/ 2>/dev/null || true
-          cp MakeCoreClrFramework.sh package/CoreClrSDK/ 2>/dev/null || true
-          cp FetchCoreClrSDK.sh package/CoreClrSDK/ 2>/dev/null || true
-          cp FetchCoreClrSDK.bat package/CoreClrSDK/ 2>/dev/null || true
-          cp FetchCoreClrSDK_iOS.sh package/CoreClrSDK/ 2>/dev/null || true
-
-          # Copy Unreal Build System files
-          cp CoreClrSDK.Build.cs package/CoreClrSDK/ 2>/dev/null || true
-          cp CoreClrSDK_APL.xml package/CoreClrSDK/ 2>/dev/null || true
-
-          # Copy headers
-          if [ -d "include" ]; then
-            cp -Rf include package/CoreClrSDK/
-          fi
-
-          # Copy docs
-          cp README.md package/CoreClrSDK/ 2>/dev/null || true
-          cp .gitignore package/CoreClrSDK/ 2>/dev/null || true
+          # Shared public host ABI headers (tracked in git, one copy for every platform)
+          cp -Rf include package/CoreClrSDK/
 
           echo "=== Package contents ==="
           ls -la package/CoreClrSDK/
 
-      # ── Create ZIP ──────────────────────────────────────────────────────────
-
       - name: Create ZIP archive
         run: |
           cd package
-          ZIP_NAME="CoreClrSDK-${{ github.event.inputs.version || 'v0.1.0' }}-${{ github.event.inputs.build_type || 'Debug' }}.zip"
-          zip -r ${ZIP_NAME} CoreClrSDK/
-          echo "ZIP created: package/${ZIP_NAME}"
-          ls -lh ${ZIP_NAME}
-          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
-
-      # ── Upload artifact ─────────────────────────────────────────────────────
+          ZIP_NAME="CoreClrSDK-${{ github.event.inputs.version }}-${{ github.event.inputs.build_type || 'Release' }}.zip"
+          zip -r "$ZIP_NAME" CoreClrSDK/
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+          ls -lh "$ZIP_NAME"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CoreClrSDK-${{ github.event.inputs.version || 'v0.1.0' }}-${{ github.event.inputs.build_type || 'Debug' }}
+          name: CoreClrSDK-${{ github.event.inputs.version }}-${{ github.event.inputs.build_type || 'Release' }}
           path: package/${{ env.ZIP_NAME }}
           retention-days: 90
-
-      # ── Create GitHub Release ───────────────────────────────────────────────
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.event.inputs.version || 'v0.1.0' }}
-          name: CoreClrSDK ${{ github.event.inputs.version || 'v0.1.0' }}
+          tag_name: ${{ github.event.inputs.version }}
+          name: CoreClrSDK ${{ github.event.inputs.version }}
           body: |
-            CoreClrSDK release ${{ github.event.inputs.version || 'v0.1.0' }}
+            CoreClrSDK release ${{ github.event.inputs.version }}
 
             ## Build Type
-            ${{ github.event.inputs.build_type || 'Debug' }}
+            ${{ github.event.inputs.build_type || 'Release' }}
 
             ## Platforms
-            - ✅ Win64 (Windows x64)
-            - ✅ Linux (x64)
-            - ✅ macOS (arm64)
-            - ✅ Android (arm64)
-            - ✅ iOS (arm64)
-            - ✅ iOS Simulator (arm64)
+            - Android arm64
+            - iOS device arm64
+            - iOS Simulator arm64
+
+            ## Layout
+            `<Platform>/<arch>/{lib,runtime}` — `Android/arm64`, `IOS/arm64`, `IOSSimulator/arm64`.
+            Desktop platforms run the upstream hostfxr host and ship no SDK payload.
 
             ## Installation
             1. Download the ZIP file
-            2. Extract to your UnrealSharp plugin's `Source/ThirdParty/CoreClrSDK/` directory
-            3. Or use the build scripts to rebuild from source:
-               ```bash
-               ./BuildCoreClrSDK.sh ~/dotnet-runtime <platform>
-               ```
+            2. Extract into `Plugins/UnrealSharp/Source/ThirdParty/CoreClrSDK/`
+            3. Or build from source: `./BuildCoreClrSDK.sh <dotnet-runtime-dir> <platform> <Debug|Release> <arch>`
 
             ## Build Info
-            Built from: https://github.com/dotnet/runtime.git (branch: release/10.0)
-            Build date: ${{ github.event.inputs.version || 'v0.1.0' }}
+            Built from: https://github.com/dotnet/runtime.git (${{ env.RUNTIME_TAG }})
+            Build date: ${{ github.event.inputs.version }}
           files: |
             package/${{ env.ZIP_NAME }}
           draft: false

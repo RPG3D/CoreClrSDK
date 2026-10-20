@@ -1,104 +1,140 @@
 # CoreClrSDK for UnrealSharp
 
-CoreCLR runtime SDK for [UnrealSharp](https://github.com/RPG3D/UnrealSharp). This repository contains build scripts, CI workflows, and UBT integration files. Pre-built binaries are distributed via [GitHub Releases](https://github.com/RPG3D/CoreClrSDK/releases).
+CoreCLR runtime SDK for [UnrealSharp](https://github.com/RPG3D/UnrealSharp). This repository
+contains build scripts, CI workflows and UBT integration files. Pre-built binaries are
+distributed via [GitHub Releases](https://github.com/RPG3D/CoreClrSDK/releases).
 
-CoreCLR is the default .NET runtime for UnrealSharp on all platforms: Windows, macOS, Linux, Android, iOS, and iOS Simulator.
+**Mobile only.** Android and iOS have no hostfxr, so UnrealSharp bootstraps CoreCLR through
+the raw `coreclr_initialize` / `coreclr_create_delegate` C API and needs this SDK. Desktop
+(Win64 / macOS / Linux) uses the upstream hostfxr host and links nothing from here, so the
+SDK ships no desktop payload — building one would be pure CI time.
 
 ## Download (Recommended)
 
 1. Go to [Releases](https://github.com/RPG3D/CoreClrSDK/releases)
 2. Download `CoreClrSDK-{version}-{build-type}.zip`
-3. Extract to UnrealSharp's `Source/ThirdParty/CoreClrSDK/`
+3. Extract into `Plugins/UnrealSharp/Source/ThirdParty/CoreClrSDK/`
+
+## Directory layout
+
+Same convention as [MonoSDK](https://github.com/RPG3D/MonoSDK): every platform keeps its
+SDK at `<Platform>/<arch>/`, so one rule covers all of them.
+
+```
+Android/arm64/               # Android device
+IOS/arm64/                   # iOS device
+IOSSimulator/arm64/          # iOS Simulator
+    lib/                     # libcoreclr, libclrjit, libclrinterpreter, System.* shims
+    runtime/                 # BCL managed assemblies (~170 dlls)
+    VERSION.txt              # dotnet/runtime commit + subset list used
+    CoreCLR.embeddedframework.zip   # iOS / Simulator only
+include/                     # public host ABI headers (tracked, shared by all platforms)
+```
+
+iOS rejects scattered dylibs, so all native runtime files are packaged into a single
+umbrella framework (`CoreCLR.embeddedframework.zip`) that UBT links and copies into
+`.app/Frameworks/`. `System.Private.CoreLib.dll` is always the **pure-IL** copy from
+`clr.corelib`: the ReadyToRun build from the runtime pack cannot be used by the
+interpreter.
 
 ## Build from Source
 
 ```bash
-# Clone dotnet/runtime (release/10.0 branch)
-git clone --depth 1 --branch release/10.0 https://github.com/dotnet/runtime.git ~/dotnet-runtime
+# Clone dotnet/runtime at the pinned tag (see DotNetRuntime.version / RUNTIME_TAG)
+git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git ~/dotnet-runtime
 
-# Build for a specific platform
-./BuildCoreClrSDK.sh ~/dotnet-runtime <platform> [build-type]
-
-# Platforms: win64 | linux | macos | android | ios
-# Build types: Debug (default) | Release
-
-# Example: iOS Simulator Debug
+# Build + populate the SDK directory in one step
+./BuildCoreClrSDK.sh ~/dotnet-runtime android       Release arm64
+./BuildCoreClrSDK.sh ~/dotnet-runtime ios           Release arm64
+./BuildCoreClrSDK.sh ~/dotnet-runtime iossimulator  Release arm64
 ```
 
-Prerequisites: Visual Studio 2022 (Windows), Xcode (macOS/iOS), Android NDK (Android), CMake + Ninja.
+`BuildCoreClrSDK.sh` owns the platform/arch matrix, applies the iOS libs patch, and calls
+`CopySDKFromSrc.sh` at the end. `CopySDKFromSrc.sh` can also be run on its own against an
+already-built tree (that is what CI does).
+
+Prerequisites: Xcode (iOS / Simulator), Android NDK (Android), CMake + Ninja.
+
+### Fast path (Android only)
+
+```bash
+./FetchCoreClrSDK.sh          # NuGet runtime pack -> Android/arm64/{lib,runtime}
+```
+
+Downloads `microsoft.netcore.app.runtime.android-arm64` at the pinned version instead of
+building the runtime. Valid for Android because the JIT consumes the ReadyToRun CoreLib.
+iOS cannot use this path (interpreter needs the pure-IL CoreLib).
+
+## Build subsets (why the build is short)
+
+`DotNetRuntime.version` is the single source of truth (`BUILD_SUBSET`), shared by the build
+script and CI. The SDK consumes exactly these outputs:
+
+| Subset | Provides |
+|---|---|
+| `clr.runtime` | `libcoreclr`, `libclrjit`, `libclrinterpreter` |
+| `clr.corelib` | pure-IL `System.Private.CoreLib.dll` |
+| `clr.nativecorelib` | R2R CoreLib input for the runtime pack |
+| `libs.sfx` | BCL managed assemblies + runtime-pack layout |
+| `libs.native` | `System.Native` / Compression / Globalization / Security shims |
+
+Subsets that used to be built and are now deliberately absent:
+
+| Subset | Why it was unnecessary |
+|---|---|
+| `clr.alljits` | alt-JITs for JIT tests / ILCompiler; the SDK ships one JIT |
+| `clr.tools` | ILCompiler, crossgen2 publish, ILVerify, ilasm/ildasm, dotnet-pgo, R2RDump, cdac-build-tool |
+| `clr.packages` | NuGet packaging of IL SDK / TestHost / ILAsm — `CoreClrSDK` is not a NuGet package |
+| `libs.oob` | out-of-band libraries that are not part of the shared framework |
+| `libs.pretest` | test infrastructure and test assets |
+
+`CopySDKFromSrc.sh` fails loudly if a required output is missing, so dropping a subset can
+never silently produce an incomplete SDK.
 
 ## GitHub Actions
 
-`build-coreclr-sdk.yml` (workflow_dispatch) builds CoreCLR from a pinned dotnet/runtime ref
-and uploads the populated platform dirs as artifacts:
+Both workflows are `workflow_dispatch`-only and build on GitHub-hosted macOS runners.
 
-- **android-arm64** (ubuntu, Release) — verified path; unpack `android/{lib,runtime}` over this dir
+- `build-all.yml` — three flat jobs (`build-android`, `build-ios`, `build-iossimulator`),
+  each calling `BuildCoreClrSDK.sh`. Artifacts: `CoreClrSDK-Android-arm64-{Debug,Release}`,
+  `CoreClrSDK-iOS-arm64-*`, `CoreClrSDK-iOS-Simulator-arm64-*`.
+- `package-release.yml` — downloads the three artifacts into `Android/arm64`,
+  `IOS/arm64`, `IOSSimulator/arm64`, verifies payload counts, and publishes one release zip.
 
-Defaults to `v11.0.0-rc.1.26425.128`. Artifacts replace the local build/fetch steps
-(git-ignored binaries are never committed).
+## Integration with UnrealSharp
 
-## Build Subsets
+`CoreClrSDK.Build.cs`:
 
-CoreCLR uses two build subsets (vs Mono's single `mono+libs`):
+- **Android** — links `lib/coreclr.so`, stages the BCL as **UFS** into
+  `Content/Managed/Android`, project DLLs UFS next to it, and wires `CoreClrSDK_APL.xml`
+  so `lib/*.so` land in `APK/lib/arm64-v8a/`.
+- **iOS device** — links `IOS/arm64/lib/CoreCLR.embeddedframework.zip`; BCL and project
+  DLLs are staged UFS into `Content/Managed/IOS` (shared by device and simulator).
+- **iOS Simulator** — same, from `IOSSimulator/arm64`.
+- **Desktop** — no-op (`hostfxr` path in the plugin).
 
-| Subset | Purpose | Output |
-|--------|---------|--------|
-| `clr.native` | Native runtime (libcoreclr, libclrjit, libclrinterpreter) | `.so` / `.dylib` / `.dll` |
-| `clr.corelib` | Managed System.Private.CoreLib (pure-IL) | `.dll` in `coreclr/*/IL/` |
-
-The pure-IL `System.Private.CoreLib.dll` from `clr.corelib` is critical for iOS — the crossgen'd (ReadyToRun) version from the testhost/runtime-pack lacks `System.__Canon` in a form the interpreter needs.
+`<Platform>/<arch>/` is resolved per target architecture; a legacy flat `<Platform>/` is
+still accepted for SDKs extracted from older releases.
 
 ## Repository Structure
 
 ```
 ├── .github/workflows/        # CI: build-all.yml + package-release.yml
-├── BuildCoreClrSDK.sh        # Main build script (dotnet/runtime → SDK)
-├── FetchCoreClrSDK.sh/.bat   # Android NuGet download (alternative)
-├── FetchCoreClrSDK_iOS.sh    # iOS local build copy (alternative)
-├── MakeCoreClrFramework.sh   # iOS framework packager (.embeddedframework.zip)
+├── BuildCoreClrSDK.sh        # build dotnet/runtime -> SDK (calls CopySDKFromSrc.sh)
+├── CopySDKFromSrc.sh         # copy an already-built tree -> SDK (CI entry point)
+├── FetchCoreClrSDK.sh/.bat   # Android NuGet fast path
+├── MakeCoreClrFramework.sh   # iOS umbrella framework packager
+├── DotNetRuntime.version     # pinned TFM/runtime version/BUILD_SUBSET
 ├── CoreClrSDK.Build.cs       # UnrealBuildTool external module
 ├── CoreClrSDK_APL.xml        # Android APL manifest
-├── include/                  # CoreCLR C headers (coreclrhost.h, host_runtime_contract.h)
-└── <platform>/               # Platform binary directories (git-ignored)
-    ├── lib/                  # Native runtime files
-    └── runtime/              # BCL managed .dll
+└── include/                  # coreclrhost.h, host_runtime_contract.h
 ```
-
-## Platform Directory Layout
-
-Each platform follows the same structure:
-
-```
-<platform>/
-├── lib/
-│   ├── libcoreclr.{so|dylib|dll}        # CoreCLR runtime
-│   ├── libclrjit.{so|dylib|dll}          # JIT compiler
-│   ├── libclrinterpreter.{so|dylib|dll}  # Interpreter
-│   ├── libSystem.Native.{so|dylib}       # System native shims
-│   ├── libSystem.IO.Compression.Native.{so|dylib}
-│   ├── libSystem.Globalization.Native.{so|dylib}
-│   ├── libSystem.Net.Security.Native.{so|dylib}
-│   ├── libSystem.Security.Cryptography.Native.Apple.{so|dylib}
-│   └── *.embeddedframework.zip           # iOS only: framework packages
-└── runtime/
-    ├── System.Private.CoreLib.dll         # Pure-IL managed CoreLib
-    ├── System.Runtime.dll
-    ├── System.Collections.dll
-    └── ... (~170 BCL DLLs total)
-```
-
-## Integration with UnrealSharp
-
-1. Clone this repo (or download from Releases) to `Source/ThirdParty/CoreClrSDK/` in the UnrealSharp plugin
-2. `CoreClrSDK.Build.cs` handles:
-   - **Android**: compile-time link `libcoreclr.so`, stage BCL as NonUFS, project DLLs as UFS, APL for `.so` staging
-   - **iOS Simulator**: framework `.zip` staging, bare dylib staging, BCL NonUFS, project DLLs UFS
-   - **Other platforms**: no-op (hostfxr path handles Win64/Mac/Linux)
 
 ## References
 
-- [dotnet/runtime](https://github.com/dotnet/runtime) — .NET runtime source (branch: release/10.0)
+- [dotnet/runtime](https://github.com/dotnet/runtime) — runtime source (pinned tag in `DotNetRuntime.version`)
 - [UnrealSharp](https://github.com/RPG3D/UnrealSharp)
+- [MonoSDK](https://github.com/RPG3D/MonoSDK) — the layout/build conventions this repo follows
 - [IOSClrDemo](https://github.com/RPG3D/CoreClrDemo/tree/main/IOSClrDemo) — iOS CoreCLR demo
 
 ## License

@@ -7,7 +7,7 @@
 
      Path note: $S(PluginDir) resolves to the directory containing this APL file,
      which is Source/ThirdParty/CoreClrSDK/ inside the UnrealSharp plugin root.
-     All CoreCLR native artifacts live under Android/lib/ relative to this dir.
+     All CoreCLR native artifacts live under Android/arm64/lib/ relative to this dir.
 
      Modeled on MonoSDK_APL.xml. dst uses $S(BuildDir)/libs/ (not jni/) — Gradle
      stages .so files from libs/ into the APK. -->
@@ -27,7 +27,7 @@
     <if condition="bArm64">
       <true>
         <!-- CoreCLR runtime + JIT -->
-        <copyDir src="$S(PluginDir)/Android/lib/"
+        <copyDir src="$S(PluginDir)/Android/arm64/lib/"
                   dst="$S(BuildDir)/libs/arm64-v8a/" />
 
         <log text="UnrealSharp CoreClrSDK: copied CoreClr sdk files"/>

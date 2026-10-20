@@ -1,4 +1,11 @@
-name: Build CoreClrSDK - All Platforms
+name: Build CoreClrSDK - Mobile Platforms
+
+# Builds only what UnrealSharp consumes: Android arm64, iOS device arm64 and the
+# iOS Simulator arm64. Desktop (Win64 / Linux / macOS) runs the upstream hostfxr host
+# and links nothing from this SDK, so those legs were dead weight.
+#
+# Every leg calls BuildCoreClrSDK.sh, which owns the platform matrix, the subset list
+# (DotNetRuntime.version) and the iOS libs patch — no second copy of any of that here.
 
 on:
   workflow_dispatch:
@@ -6,38 +13,28 @@ on:
       build_type:
         description: 'Build type'
         required: true
-        default: 'Debug'
+        default: 'Release'
         type: choice
         options:
           - Debug
           - Release
-      build_win64:
-        description: 'Build Windows x64'
-        required: false
-        type: boolean
-        default: true
-      build_linux:
-        description: 'Build Linux x64'
-        required: false
-        type: boolean
-        default: true
-      build_macos:
-        description: 'Build macOS arm64'
-        required: false
-        type: boolean
-        default: true
       build_android:
         description: 'Build Android arm64'
         required: false
         type: boolean
         default: true
       build_ios:
-        description: 'Build iOS arm64'
+        description: 'Build iOS device arm64'
+        required: false
+        type: boolean
+        default: true
+      build_iossimulator:
+        description: 'Build iOS Simulator arm64'
         required: false
         type: boolean
         default: true
       runtime_commit:
-        description: 'dotnet/runtime commit SHA (empty = latest release/11.0 tip)'
+        description: 'dotnet/runtime commit SHA (empty = pinned release tag)'
         required: false
         default: ''
         type: string
@@ -50,133 +47,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BUILD_SUBSET: clr.runtime+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs
+  # Pinned dotnet/runtime tag. Keep in sync with DotNetRuntime.version RUNTIME_VERSION.
+  RUNTIME_TAG: v11.0.0-rc.1.26425.128
 
 jobs:
-  # ── Windows x64 ──────────────────────────────────────────────────────────
-  build-win64:
-    runs-on: windows-2022
-    if: github.event.inputs.build_win64 == 'true'
-    steps:
-      - name: Checkout CoreClrSDK
-        uses: actions/checkout@v4
-
-      - name: Clone dotnet/runtime
-        run: |
-          git config --system core.longpaths true
-          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
-          if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
-            cd dotnet-runtime
-            git fetch --depth=100 origin "$RUNTIME_COMMIT"
-            git checkout "$RUNTIME_COMMIT"
-          else
-            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
-          fi
-        shell: bash
-
-      - name: Build CoreCLR (Windows x64)
-        run: |
-          cd dotnet-runtime
-          build.cmd ${{ env.BUILD_SUBSET }} -configuration ${{ github.event.inputs.build_type || 'Debug' }}
-        shell: cmd
-
-      - name: Copy artifacts to SDK
-        run: |
-          CopySDKFromSrc.bat dotnet-runtime ${{ github.event.inputs.build_type || 'Debug' }}
-        shell: cmd
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: CoreClrSDK-Win64-${{ github.event.inputs.build_type || 'Debug' }}
-          path: win64/
-          retention-days: 30
-          if-no-files-found: error
-
-  # ── Linux x64 ────────────────────────────────────────────────────────────
-  build-linux:
-    runs-on: ubuntu-latest
-    if: github.event.inputs.build_linux == 'true'
-    steps:
-      - name: Checkout CoreClrSDK
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang llvm lld \
-            libicu-dev libssl-dev libkrb5-dev \
-            liblttng-ust-dev libunwind-dev \
-            libcurl4-openssl-dev zlib1g-dev
-
-      - name: Clone dotnet/runtime
-        run: |
-          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
-          if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
-            cd dotnet-runtime
-            git fetch --depth=100 origin "$RUNTIME_COMMIT"
-            git checkout "$RUNTIME_COMMIT"
-          else
-            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
-          fi
-
-      - name: Build CoreCLR (Linux x64)
-        run: |
-          cd dotnet-runtime
-          ./build.sh ${{ env.BUILD_SUBSET }} -configuration ${{ github.event.inputs.build_type || 'Debug' }}
-
-      - name: Copy artifacts to SDK
-        run: |
-          bash CopySDKFromSrc.sh $(pwd)/dotnet-runtime linux ${{ github.event.inputs.build_type || 'Debug' }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: CoreClrSDK-Linux-x64-${{ github.event.inputs.build_type || 'Debug' }}
-          path: linux/
-          retention-days: 30
-          if-no-files-found: error
-
-  # ── macOS arm64 ──────────────────────────────────────────────────────────
-  build-macos:
-    runs-on: macos-26
-    if: github.event.inputs.build_macos == 'true'
-    steps:
-      - name: Checkout CoreClrSDK
-        uses: actions/checkout@v4
-
-      - name: Clone dotnet/runtime
-        run: |
-          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
-          if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
-            cd dotnet-runtime
-            git fetch --depth=100 origin "$RUNTIME_COMMIT"
-            git checkout "$RUNTIME_COMMIT"
-          else
-            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
-          fi
-
-      - name: Build CoreCLR (macOS arm64)
-        run: |
-          cd dotnet-runtime
-          ./build.sh ${{ env.BUILD_SUBSET }} -configuration ${{ github.event.inputs.build_type || 'Debug' }}
-
-      - name: Copy artifacts to SDK
-        run: |
-          bash CopySDKFromSrc.sh $(pwd)/dotnet-runtime macos ${{ github.event.inputs.build_type || 'Debug' }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: CoreClrSDK-macOS-arm64-${{ github.event.inputs.build_type || 'Debug' }}
-          path: macos/
-          retention-days: 30
-          if-no-files-found: error
-
-  # ── Android arm64 ────────────────────────────────────────────────────────
   build-android:
     runs-on: macos-26
     if: github.event.inputs.build_android == 'true'
@@ -187,8 +61,6 @@ jobs:
       - name: Select Android NDK
         run: |
           set -euo pipefail
-          # The runner image ships the Android SDK (incl. NDK); setup-android@v3
-          # fails on it ('tools' package no longer exists), so just pick the NDK.
           NDK_DIR="$(ls -d "$ANDROID_HOME"/ndk/* 2>/dev/null | sort -V | tail -1)"
           if [ -z "$NDK_DIR" ]; then
             echo "No NDK found under ANDROID_HOME ($ANDROID_HOME)" >&2
@@ -201,33 +73,26 @@ jobs:
       - name: Clone dotnet/runtime
         run: |
           RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
+          git clone --depth 1 --branch "${{ env.RUNTIME_TAG }}" https://github.com/dotnet/runtime.git dotnet-runtime
           if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
             cd dotnet-runtime
             git fetch --depth=100 origin "$RUNTIME_COMMIT"
             git checkout "$RUNTIME_COMMIT"
-          else
-            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
           fi
 
-      - name: Build CoreCLR (Android arm64)
+      - name: Build CoreClrSDK (Android arm64)
         run: |
-          cd dotnet-runtime
-          ./build.sh ${{ env.BUILD_SUBSET }} -os android -arch arm64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
-
-      - name: Copy artifacts to SDK
-        run: |
-          bash CopySDKFromSrc.sh $(pwd)/dotnet-runtime android ${{ github.event.inputs.build_type || 'Debug' }}
+          chmod +x BuildCoreClrSDK.sh CopySDKFromSrc.sh
+          ./BuildCoreClrSDK.sh "$(pwd)/dotnet-runtime" android ${{ github.event.inputs.build_type || 'Release' }} arm64
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CoreClrSDK-Android-arm64-${{ github.event.inputs.build_type || 'Debug' }}
-          path: android/
+          name: CoreClrSDK-Android-arm64-${{ github.event.inputs.build_type || 'Release' }}
+          path: Android/arm64/
           retention-days: 30
           if-no-files-found: error
 
-  # ── iOS arm64 (Device) ──────────────────────────────────────────────────
   build-ios:
     runs-on: macos-26
     if: github.event.inputs.build_ios == 'true'
@@ -238,41 +103,52 @@ jobs:
       - name: Clone dotnet/runtime
         run: |
           RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
+          git clone --depth 1 --branch "${{ env.RUNTIME_TAG }}" https://github.com/dotnet/runtime.git dotnet-runtime
           if [ -n "$RUNTIME_COMMIT" ]; then
-            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
             cd dotnet-runtime
             git fetch --depth=100 origin "$RUNTIME_COMMIT"
             git checkout "$RUNTIME_COMMIT"
-          else
-            git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/runtime.git dotnet-runtime
           fi
 
-      - name: Patch libs-native runtime installs (iOS device)
+      - name: Build CoreClrSDK (iOS device arm64)
         run: |
-          # .NET 11 extended the runtime-component install of libs -Static libs to
-          # iOS (System.IO.Compression.Native / System.Native / System.Globalization.Native),
-          # but those -Static targets are not in the default build graph on ios device
-          # → cmake install fails with FILE_NOT_FOUND. Our SDK does not consume them
-          # (net10-proven); drop iOS from those install conditions.
-          grep -rl "CLR_CMAKE_HOST_IOS OR " dotnet-runtime/src/native/libs/*/CMakeLists.txt | \
-            xargs -r sed -i.bak 's/CLR_CMAKE_HOST_IOS OR //'
-          grep -rn "COMPONENT runtime" dotnet-runtime/src/native/libs/*/CMakeLists.txt | head -4
-
-      - name: Build CoreCLR (iOS Device)
-        run: |
-          cd dotnet-runtime
-          ./build.sh ${{ env.BUILD_SUBSET }} -os ios -arch arm64 -configuration ${{ github.event.inputs.build_type || 'Debug' }}
-
-      - name: Copy artifacts to SDK (iOS)
-        run: |
-          bash CopySDKFromSrc.sh $(pwd)/dotnet-runtime ios ${{ github.event.inputs.build_type || 'Debug' }}
+          chmod +x BuildCoreClrSDK.sh CopySDKFromSrc.sh MakeCoreClrFramework.sh
+          ./BuildCoreClrSDK.sh "$(pwd)/dotnet-runtime" ios ${{ github.event.inputs.build_type || 'Release' }} arm64
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CoreClrSDK-iOS-arm64-${{ github.event.inputs.build_type || 'Debug' }}
-          path: ios/
+          name: CoreClrSDK-iOS-arm64-${{ github.event.inputs.build_type || 'Release' }}
+          path: IOS/arm64/
           retention-days: 30
           if-no-files-found: error
 
-  # ── iOS Simulator arm64 ─────────────────────────────────────────────────
+  build-iossimulator:
+    runs-on: macos-26
+    if: github.event.inputs.build_iossimulator == 'true'
+    steps:
+      - name: Checkout CoreClrSDK
+        uses: actions/checkout@v4
+
+      - name: Clone dotnet/runtime
+        run: |
+          RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
+          git clone --depth 1 --branch "${{ env.RUNTIME_TAG }}" https://github.com/dotnet/runtime.git dotnet-runtime
+          if [ -n "$RUNTIME_COMMIT" ]; then
+            cd dotnet-runtime
+            git fetch --depth=100 origin "$RUNTIME_COMMIT"
+            git checkout "$RUNTIME_COMMIT"
+          fi
+
+      - name: Build CoreClrSDK (iOS Simulator arm64)
+        run: |
+          chmod +x BuildCoreClrSDK.sh CopySDKFromSrc.sh MakeCoreClrFramework.sh
+          ./BuildCoreClrSDK.sh "$(pwd)/dotnet-runtime" iossimulator ${{ github.event.inputs.build_type || 'Release' }} arm64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreClrSDK-iOS-Simulator-arm64-${{ github.event.inputs.build_type || 'Release' }}
+          path: IOSSimulator/arm64/
+          retention-days: 30
+          if-no-files-found: error
