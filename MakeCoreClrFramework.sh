@@ -70,11 +70,17 @@ if [[ ! -f "$CORECLR_DYLIB" ]]; then
     exit 1
 fi
 
-# Other runtime dylibs packaged into the framework's Frameworks/ subdirectory.
-# Loaded by CoreCLR at runtime (JIT/interpreter + P/Invoke native shims).
-OTHER_DYLIBS=(
+# Execution engines (JIT / interpreter). CoreCLR resolves these from the directory
+# of its own image (vm/codeman.cpp: GetClrModulePathName -> <dir>/libclrjit.dylib),
+# so they must sit NEXT TO the framework binary, not in Frameworks/.
+EXEC_ENGINE_DYLIBS=(
     libclrjit.dylib
     libclrinterpreter.dylib
+)
+
+# P/Invoke interop shims. Kept in Frameworks/ and reached through the host runtime
+# contract (__Internal -> dlsym(RTLD_DEFAULT)) or the app's native search paths.
+OTHER_DYLIBS=(
     libSystem.Native.dylib
     libSystem.IO.Compression.Native.dylib
     libSystem.Net.Security.Native.dylib
@@ -86,11 +92,25 @@ FW_WORK="$(mktemp -d)"
 FW_ROOT="$FW_WORK/CoreCLR.embeddedframework/CoreCLR.framework"
 mkdir -p "$FW_ROOT/Frameworks"
 
-# Main binary: copy libcoreclr.dylib as the framework executable.
+# Main binary: copy libcoreclr.dylib as the framework executable and give it the
+# install name the linker will record. Without this the app's LC_LOAD_DYLIB stays
+# "@rpath/libcoreclr.dylib" and dyld looks for SharpDemo.app/Frameworks/libcoreclr.dylib,
+# which does not exist inside a framework bundle.
 cp "$CORECLR_DYLIB" "$FW_ROOT/CoreCLR"
 chmod +x "$FW_ROOT/CoreCLR"
+install_name_tool -id @rpath/CoreCLR.framework/CoreCLR "$FW_ROOT/CoreCLR"
 
-# Sub-frameworks: copy the other dylibs into Frameworks/.
+# Execution engines: next to the framework binary (see EXEC_ENGINE_DYLIBS).
+for DYLIB in "${EXEC_ENGINE_DYLIBS[@]}"; do
+    if [[ -f "$DYLIBS_DIR/$DYLIB" ]]; then
+        cp "$DYLIBS_DIR/$DYLIB" "$FW_ROOT/$DYLIB"
+        install_name_tool -id "@rpath/CoreCLR.framework/$DYLIB" "$FW_ROOT/$DYLIB"
+    else
+        echo "Warning: $DYLIB not found in $DYLIBS_DIR - skipping" >&2
+    fi
+done
+
+# Interop shims: Frameworks/ subdirectory.
 for DYLIB in "${OTHER_DYLIBS[@]}"; do
     if [[ -f "$DYLIBS_DIR/$DYLIB" ]]; then
         cp "$DYLIBS_DIR/$DYLIB" "$FW_ROOT/Frameworks/$DYLIB"
@@ -116,9 +136,12 @@ cat > "$FW_ROOT/Info.plist" <<'PLIST'
 PLIST
 
 # Pack into .embeddedframework.zip (UE5's expected format).
+# Remove the previous zip first: `zip -r` updates in place and would keep stale
+# entries (for example the old Frameworks/libclrjit.dylib) after a layout change.
 cd "$FW_WORK"
+rm -f "$OUTPUT_DIR/CoreCLR.embeddedframework.zip"
 zip -r --symlinks "$OUTPUT_DIR/CoreCLR.embeddedframework.zip" CoreCLR.embeddedframework > /dev/null
 rm -rf "$FW_WORK"
 
 echo ">>> Created: $OUTPUT_DIR/CoreCLR.embeddedframework.zip"
-echo "    (libcoreclr.dylib as CoreCLR binary + ${#OTHER_DYLIBS[@]} dylibs in Frameworks/)"
+echo "    (libcoreclr.dylib as CoreCLR binary + ${#EXEC_ENGINE_DYLIBS[@]} engines next to it + ${#OTHER_DYLIBS[@]} dylibs in Frameworks/)"

@@ -133,9 +133,21 @@ fi
 # so a new advisory against a *build-time tooling* package would break the SDK with no
 # change on our side. %3B is MSBuild's escape for ';' (a literal ';' splits the /p: value
 # into several properties and fails with MSB1006). Same rationale as MonoSDK.
+#
+# iOS / Simulator: build without dynamic code. iOS has no JIT (W^X), and with
+# FEATURE_DYNAMIC_CODE_COMPILED defined the interpreter is only enabled when
+# DOTNET_Interpreter / DOTNET_InterpMode is set — Release builds then send calli sites
+# through the JIT/IL-stub path and die with InvalidProgramException on device. Leaving
+# the feature off makes eeconfig.cpp enable the interpreter unconditionally.
+EXTRA_BUILD_ARGS=()
+if [[ "$PLATFORM" == "ios" || "$PLATFORM" == "iossimulator" ]]; then
+    EXTRA_BUILD_ARGS+=("/p:FeatureDynamicCodeCompiled=false")
+fi
+
 echo ">>> Building CoreCLR + libs for $PLATFORM ($ARCH, $BUILD_TYPE)..."
 ./build.sh "$BUILD_SUBSET" -os "$DOTNET_OS" -arch "$ARCH" -configuration "$BUILD_TYPE" \
-    "/p:WarningsNotAsErrors=NU1901%3BNU1902%3BNU1903%3BNU1904"
+    "/p:WarningsNotAsErrors=NU1901%3BNU1902%3BNU1903%3BNU1904" \
+    "${EXTRA_BUILD_ARGS[@]}"
 
 echo ""
 echo ">>> Build complete. Populating the SDK directory..."

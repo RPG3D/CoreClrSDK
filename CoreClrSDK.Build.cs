@@ -200,6 +200,14 @@ public class CoreClrSDK : ModuleRules
 
                 string FrameworkRoot = Path.Combine(ExtractDir, "CoreCLR.embeddedframework", "CoreCLR.framework");
 
+                // Execution engines (libclrjit / libclrinterpreter) live next to the
+                // framework binary; interop shims live in Frameworks/. Sign both.
+                foreach (string Dylib in Directory.EnumerateFiles(FrameworkRoot, "*.dylib", SearchOption.TopDirectoryOnly))
+                {
+                    RunProcessCapture("/usr/bin/codesign",
+                        new[] { "-f", "-s", Identity, "--timestamp=none", Dylib }, checkExit: true);
+                }
+
                 string NestedDir = Path.Combine(FrameworkRoot, "Frameworks");
                 if (Directory.Exists(NestedDir))
                 {
