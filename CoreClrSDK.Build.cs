@@ -21,7 +21,11 @@
 // extracted from an older release keeps working.
 
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
 using EpicGames.Core;
 using Microsoft.Extensions.Logging;
 using UnrealBuildTool;
@@ -125,12 +129,272 @@ public class CoreClrSDK : ModuleRules
                     $"or run BuildCoreClrSDK.sh {(bIsSimulator ? "iossimulator" : "ios")}.");
             }
 
+            // Real device only: UE signs the outer app and the framework bundle, but it
+            // does not recurse into CoreCLR.framework/Frameworks/, leaving the nested
+            // dylibs unsigned and the on-device install invalid. Pre-sign them here.
+            if (!bIsSimulator)
+            {
+                SignEmbeddedFrameworkZip(NativeLibDir);
+            }
+
             PublicAdditionalFrameworks.Add(new Framework(
                 "CoreCLR",
                 FrameworkZip,
                 Framework.FrameworkMode.LinkAndCopy,
                 null));
         }
+    }
+
+    // ── Embedded framework pre-signing (iOS device, macOS host only) ────────────
+    //
+    // Mirrors MonoSDK.Build.cs. UE stages CoreCLR.embeddedframework.zip into the IPA
+    // and signs the outer app and the framework binary, but NOT the dylibs nested in
+    // CoreCLR.framework/Frameworks/ — pre-sign them so on-device validation passes.
+    //
+    // Cache: .framework_sign_cache.txt next to the zip, one line per signed zip:
+    //   "<zip sha256> <identity sha1>"
+    // The identity is part of the key on purpose: the signature is bound to the
+    // certificate, so a renewed/rotated certificate, a different team's profile, or a
+    // switch between manual and automatic signing must re-sign even though the zip
+    // bytes are unchanged. A plain content hash (MonoSDK's original scheme) would
+    // silently keep the stale signature and the install would fail at launch.
+    private void SignEmbeddedFrameworkZip(string nativeLibDir)
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        string ZipPath = Path.Combine(nativeLibDir, "CoreCLR.embeddedframework.zip");
+        if (!File.Exists(ZipPath))
+        {
+            return;
+        }
+
+        string CachePath = Path.Combine(nativeLibDir, ".framework_sign_cache.txt");
+        try
+        {
+            string Identity = FindCodeSigningIdentity();
+            if (Identity == null)
+            {
+                Logger.LogWarning("CoreClrSDK: no code-signing identity found; nested framework dylibs are unsigned.");
+                return;
+            }
+
+            string ZipHash = ComputeSha256(ZipPath);
+            if (IsInSignCache(CachePath, ZipHash, Identity))
+            {
+                Logger.LogInformation("CoreClrSDK: CoreCLR.embeddedframework.zip already signed with {0}; skipping.", Identity);
+                return;
+            }
+
+            // Unzip -> codesign every Mach-O -> repack with native zip (keeps unix
+            // modes and symlinks; ZipArchive would flatten both).
+            string WorkDir = Path.Combine(Path.GetTempPath(), "CoreClrSDKSign_" + Path.GetRandomFileName());
+            string ExtractDir = Path.Combine(WorkDir, "extract");
+            Directory.CreateDirectory(ExtractDir);
+            File.Copy(ZipPath, ZipPath + ".bak", overwrite: true);
+            try
+            {
+                RunProcessCapture("/usr/bin/unzip", new[] { "-q", ZipPath, "-d", ExtractDir }, checkExit: true);
+
+                string FrameworkRoot = Path.Combine(ExtractDir, "CoreCLR.embeddedframework", "CoreCLR.framework");
+
+                string NestedDir = Path.Combine(FrameworkRoot, "Frameworks");
+                if (Directory.Exists(NestedDir))
+                {
+                    foreach (string Dylib in Directory.EnumerateFiles(NestedDir, "*.dylib", SearchOption.TopDirectoryOnly))
+                    {
+                        RunProcessCapture("/usr/bin/codesign",
+                            new[] { "-f", "-s", Identity, "--timestamp=none", Dylib }, checkExit: true);
+                    }
+                }
+
+                // The framework binary is signed by Xcode later; pre-signing it keeps the
+                // bundle self-consistent for consumers that embed the zip directly.
+                string FrameworkBinary = Path.Combine(FrameworkRoot, "CoreCLR");
+                if (File.Exists(FrameworkBinary))
+                {
+                    RunProcessCapture("/usr/bin/codesign",
+                        new[] { "-f", "-s", Identity, "--timestamp=none", FrameworkBinary }, checkExit: true);
+                }
+
+                string NewZip = Path.Combine(WorkDir, "CoreCLR.embeddedframework.zip");
+                RunProcessCapture("/usr/bin/zip", new[] { "-X", "-y", "-q", "-r", NewZip, "CoreCLR.embeddedframework" },
+                    ExtractDir, checkExit: true);
+                File.Copy(NewZip, ZipPath, overwrite: true);
+            }
+            finally
+            {
+                Directory.Delete(WorkDir, true);
+            }
+
+            AppendToSignCache(CachePath, ZipHash, Identity);
+            Logger.LogInformation("CoreClrSDK: CoreCLR.embeddedframework.zip signed with {0}; pristine original kept at {1}.bak.",
+                Identity, ZipPath);
+        }
+        catch (Exception Ex)
+        {
+            Logger.LogWarning("CoreClrSDK: framework signing skipped due to error: {0}", Ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// SHA-1 of the preferred code-signing identity, or null when none is usable.
+    /// When Config/IOS/IOSEngine.ini declares CodeSigningTeam, an identity carrying that
+    /// team in its display name wins; otherwise the first valid identity is used.
+    /// The SHA-1 (not the name) is returned so codesign cannot resolve to a revoked or
+    /// duplicate-name certificate. CSSMERR_ lines are expired/revoked and are skipped.
+    /// </summary>
+    private string FindCodeSigningIdentity()
+    {
+        (_, string StdOut) = RunProcessCapture("/usr/bin/security", new[] { "find-identity", "-v", "-p", "codesigning" });
+
+        string PreferredTeam = GetConfiguredSigningTeam();
+        string FirstIdentity = null;
+
+        foreach (string Line in StdOut.Split('\n'))
+        {
+            if (Line.Contains("CSSMERR_", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string[] Parts = Line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (Parts.Length < 2 || Parts[1].Length != 40 || !IsHexString(Parts[1]))
+            {
+                continue;
+            }
+
+            FirstIdentity ??= Parts[1];
+            if (!string.IsNullOrEmpty(PreferredTeam) &&
+                Line.Contains("(" + PreferredTeam + ")", StringComparison.OrdinalIgnoreCase))
+            {
+                return Parts[1];
+            }
+        }
+
+        return FirstIdentity;
+    }
+
+    /// <summary>
+    /// CodeSigningTeam from Config/IOS/IOSEngine.ini, or null when the file/key is absent.
+    /// Read as plain text: the ini layers UBT sees in a module rule do not include the
+    /// platform-specific Xcode signing section.
+    /// </summary>
+    private string GetConfiguredSigningTeam()
+    {
+        if (Target.ProjectFile == null)
+        {
+            return null;
+        }
+
+        string ProjectDir = Path.GetDirectoryName(Target.ProjectFile.FullName);
+        string IniPath = Path.Combine(ProjectDir, "Config", "IOS", "IOSEngine.ini");
+        if (!File.Exists(IniPath))
+        {
+            return null;
+        }
+
+        foreach (string Line in File.ReadAllLines(IniPath))
+        {
+            string Trimmed = Line.Trim();
+            if (!Trimmed.StartsWith("CodeSigningTeam", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            int EqualsIndex = Trimmed.IndexOf('=');
+            if (EqualsIndex >= 0)
+            {
+                string Team = Trimmed.Substring(EqualsIndex + 1).Trim();
+                if (Team.Length > 0)
+                {
+                    return Team;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private string ComputeSha256(string Path)
+    {
+        return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path))).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// True when every character is an ASCII hex digit. Inlined rather than
+    /// Uri.IsHexDigit: System.Uri is not in the assembly set UBT references when
+    /// compiling rules, so it fails to resolve on macOS.
+    /// </summary>
+    private static bool IsHexString(string Value)
+    {
+        foreach (char C in Value)
+        {
+            bool bIsHexDigit = (C >= '0' && C <= '9') || (C >= 'a' && C <= 'f') || (C >= 'A' && C <= 'F');
+            if (!bIsHexDigit)
+            {
+                return false;
+            }
+        }
+
+        return Value.Length > 0;
+    }
+
+    private bool IsInSignCache(string CachePath, string ZipHash, string Identity)
+    {
+        if (!File.Exists(CachePath))
+        {
+            return false;
+        }
+
+        string Expected = ZipHash + " " + Identity;
+        return File.ReadAllLines(CachePath).Any(Line => Line.Trim().Equals(Expected, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void AppendToSignCache(string CachePath, string ZipHash, string Identity)
+    {
+        const int MaxCacheLines = 64;
+        List<string> Lines = File.Exists(CachePath)
+            ? File.ReadAllLines(CachePath).ToList()
+            : new List<string>();
+
+        Lines.Add(ZipHash + " " + Identity);
+        if (Lines.Count > MaxCacheLines)
+        {
+            Lines.RemoveRange(0, Lines.Count - MaxCacheLines);
+        }
+
+        File.WriteAllLines(CachePath, Lines);
+    }
+
+    private (int ExitCode, string StdOut) RunProcessCapture(string Exe, string[] Args, string WorkingDir = null,
+        bool checkExit = false)
+    {
+        using Process Proc = new();
+        Proc.StartInfo.FileName = Exe;
+        Proc.StartInfo.UseShellExecute = false;
+        Proc.StartInfo.CreateNoWindow = true;
+        Proc.StartInfo.RedirectStandardOutput = true;
+        Proc.StartInfo.RedirectStandardError = true;
+        Proc.StartInfo.WorkingDirectory = WorkingDir ?? Path.GetTempPath();
+        foreach (string Arg in Args)
+        {
+            Proc.StartInfo.ArgumentList.Add(Arg);
+        }
+
+        Proc.Start();
+        string StdOut = Proc.StandardOutput.ReadToEnd();
+        Proc.WaitForExit();
+        string StdErr = Proc.StandardError.ReadToEnd();
+        if (checkExit && Proc.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"{Exe} failed (exit {Proc.ExitCode}): {(StdErr + StdOut).Trim()}");
+        }
+
+        return (Proc.ExitCode, StdOut);
     }
 
     // ── SDK directory resolution ────────────────────────────────────────────────
