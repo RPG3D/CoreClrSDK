@@ -23,6 +23,7 @@
 using System;
 using System.IO;
 using EpicGames.Core;
+using Microsoft.Extensions.Logging;
 using UnrealBuildTool;
 
 public class CoreClrSDK : ModuleRules
