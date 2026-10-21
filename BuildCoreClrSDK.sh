@@ -134,19 +134,12 @@ fi
 # change on our side. %3B is MSBuild's escape for ';' (a literal ';' splits the /p: value
 # into several properties and fails with MSB1006). Same rationale as MonoSDK.
 #
-# iOS / Simulator: build without dynamic code. iOS has no JIT (W^X), and with
-# FEATURE_DYNAMIC_CODE_COMPILED defined the interpreter is only enabled when
-# DOTNET_Interpreter / DOTNET_InterpMode is set — Release builds then send calli sites
-# through the JIT/IL-stub path and die with InvalidProgramException on device. Leaving
-# the feature off makes eeconfig.cpp enable the interpreter unconditionally.
-EXTRA_BUILD_ARGS=()
-if [[ "$PLATFORM" == "ios" || "$PLATFORM" == "iossimulator" ]]; then
-    EXTRA_BUILD_ARGS+=("/p:FeatureDynamicCodeCompiled=false")
-fi
-
-# Build the full argument list before expanding it: macOS ships bash 3.2, where
-# `"${empty_array[@]}"` under `set -u` aborts with "unbound variable". The array
-# is always non-empty here (subset/os/arch/configuration + warning codes).
+# iOS keeps the default feature set. Measured on device, builds with and without
+# -DFEATURE_DYNAMIC_CODE_COMPILED behave identically (iOS runs the interpreter either
+# way), so passing /p:FeatureDynamicCodeCompiled=false added no value and was reverted.
+#
+# The argument list is built before expansion: macOS ships bash 3.2, where
+# `"${empty_array[@]}"` under `set -u` aborts with "unbound variable".
 BUILD_ARGS=(
     "$BUILD_SUBSET"
     -os "$DOTNET_OS"
@@ -154,9 +147,6 @@ BUILD_ARGS=(
     -configuration "$BUILD_TYPE"
     "/p:WarningsNotAsErrors=NU1901%3BNU1902%3BNU1903%3BNU1904"
 )
-if [[ ${#EXTRA_BUILD_ARGS[@]} -gt 0 ]]; then
-    BUILD_ARGS+=("${EXTRA_BUILD_ARGS[@]}")
-fi
 
 echo ">>> Building CoreCLR + libs for $PLATFORM ($ARCH, $BUILD_TYPE)..."
 ./build.sh "${BUILD_ARGS[@]}"
