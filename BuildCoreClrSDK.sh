@@ -144,10 +144,22 @@ if [[ "$PLATFORM" == "ios" || "$PLATFORM" == "iossimulator" ]]; then
     EXTRA_BUILD_ARGS+=("/p:FeatureDynamicCodeCompiled=false")
 fi
 
+# Build the full argument list before expanding it: macOS ships bash 3.2, where
+# `"${empty_array[@]}"` under `set -u` aborts with "unbound variable". The array
+# is always non-empty here (subset/os/arch/configuration + warning codes).
+BUILD_ARGS=(
+    "$BUILD_SUBSET"
+    -os "$DOTNET_OS"
+    -arch "$ARCH"
+    -configuration "$BUILD_TYPE"
+    "/p:WarningsNotAsErrors=NU1901%3BNU1902%3BNU1903%3BNU1904"
+)
+if [[ ${#EXTRA_BUILD_ARGS[@]} -gt 0 ]]; then
+    BUILD_ARGS+=("${EXTRA_BUILD_ARGS[@]}")
+fi
+
 echo ">>> Building CoreCLR + libs for $PLATFORM ($ARCH, $BUILD_TYPE)..."
-./build.sh "$BUILD_SUBSET" -os "$DOTNET_OS" -arch "$ARCH" -configuration "$BUILD_TYPE" \
-    "/p:WarningsNotAsErrors=NU1901%3BNU1902%3BNU1903%3BNU1904" \
-    "${EXTRA_BUILD_ARGS[@]}"
+./build.sh "${BUILD_ARGS[@]}"
 
 echo ""
 echo ">>> Build complete. Populating the SDK directory..."
