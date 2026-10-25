@@ -38,8 +38,16 @@ public class CoreClrSDK : ModuleRules
             PublicIncludePaths.Add(includeDir);
         }
 
-        if (Target.Platform == UnrealTargetPlatform.Android
-            || Target.Platform == UnrealTargetPlatform.IOS)
+        // Backend gate: CoreCLR-on-mobile is active only when the resolved runtime backend
+        // for this target is CoreCLR. Android/iOS default to Mono in this branch (see
+        // UnrealSharpRuntimeSelection in MonoSDK.Build.cs; `DotNetRuntime=CoreCLR` in the
+        // platform ini switches). Without this gate both modules would stage a BCL into
+        // Content/Managed/<Platform> and link both runtimes into the binary.
+        bool bMobileCoreClr =
+            (Target.Platform == UnrealTargetPlatform.Android || Target.Platform == UnrealTargetPlatform.IOS)
+            && !UnrealSharpRuntimeSelection.ShouldUseMono(Target);
+
+        if (bMobileCoreClr)
         {
             string bclSdkDir = Target.Platform == UnrealTargetPlatform.Android
                 ? "Android"
@@ -80,7 +88,7 @@ public class CoreClrSDK : ModuleRules
             }
         }
 
-        if (Target.Platform == UnrealTargetPlatform.Android)
+        if (bMobileCoreClr && Target.Platform == UnrealTargetPlatform.Android)
         {
             string nativeLibDir = Path.Combine(sdkRoot, "Android", "lib");
 
@@ -97,7 +105,7 @@ public class CoreClrSDK : ModuleRules
             }
         }
 
-        if (Target.Platform == UnrealTargetPlatform.IOS)
+        if (bMobileCoreClr && Target.Platform == UnrealTargetPlatform.IOS)
         {
             bool bIsSimulator = Target.Architecture == UnrealArch.IOSSimulator;
             string platformDir = bIsSimulator ? "IOSSimulator" : "IOS";
