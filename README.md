@@ -44,8 +44,7 @@ The pure-IL `System.Private.CoreLib.dll` from `clr.corelib` is critical for iOS 
 ```
 ├── .github/workflows/        # CI: build-all.yml + package-release.yml
 ├── BuildCoreClrSDK.sh        # Main build script (dotnet/runtime → SDK)
-├── FetchCoreClrSDK.sh/.bat   # Android NuGet download (alternative)
-├── FetchCoreClrSDK_iOS.sh    # iOS local build copy (alternative)
+├── FetchCoreClrSDK_iOS.sh    # iOS local build copy (simulator, alternative)
 ├── MakeCoreClrFramework.sh   # iOS framework packager (.embeddedframework.zip)
 ├── CoreClrSDK.Build.cs       # UnrealBuildTool external module
 ├── CoreClrSDK_APL.xml        # Android APL manifest
