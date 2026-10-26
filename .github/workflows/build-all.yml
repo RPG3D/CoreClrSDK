@@ -48,7 +48,7 @@ concurrency:
 
 env:
   # Pinned dotnet/runtime tag. Keep in sync with DotNetRuntime.version RUNTIME_VERSION.
-  RUNTIME_TAG: v11.0.0-rc.1.26425.128
+  RUNTIME_TAG: v10.0.12
 
 jobs:
   build-android:

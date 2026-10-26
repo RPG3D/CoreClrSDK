@@ -1,6 +1,6 @@
-DOTNET_MAJOR=11
-DOTNET_TFM=net11.0
-RUNTIME_VERSION=11.0.0-rc.1.26425.128
+DOTNET_MAJOR=10
+DOTNET_TFM=net10.0
+RUNTIME_VERSION=10.0.12
 
 # Subsets the SDK actually consumes. CopySDKFromSrc.sh reads exactly these outputs:
 #   clr.runtime       libcoreclr / libclrjit / libclrinterpreter
