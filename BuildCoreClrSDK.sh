@@ -124,8 +124,15 @@ fi
 # after the first run.
 if [[ "$PLATFORM" == "ios" ]]; then
     echo ">>> Patching libs-native runtime installs for iOS device..."
-    grep -rl "CLR_CMAKE_HOST_IOS OR " "$RUNTIME_DIR"/src/native/libs/*/CMakeLists.txt 2>/dev/null \
-        | xargs -r sed -i.bak 's/CLR_CMAKE_HOST_IOS OR //'
+    # The pattern is .NET 11-only; on release/10.0 there is nothing to patch, and
+    # `grep` returning 1 would abort this script under `set -o pipefail`.
+    PATCHED=$(grep -rl "CLR_CMAKE_HOST_IOS OR " "$RUNTIME_DIR"/src/native/libs/*/CMakeLists.txt 2>/dev/null || true)
+    if [ -n "$PATCHED" ]; then
+        printf '%s\n' "$PATCHED" | xargs sed -i.bak 's/CLR_CMAKE_HOST_IOS OR //'
+        echo "    patched: $(printf '%s\n' "$PATCHED" | wc -l | tr -d ' ') file(s)"
+    else
+        echo "    nothing to patch on this runtime branch (skipped)"
+    fi
 fi
 
 # ── Build ─────────────────────────────────────────────────────────────────────
@@ -147,6 +154,17 @@ BUILD_ARGS=(
     -configuration "$BUILD_TYPE"
     "/p:WarningsNotAsErrors=NU1901%3BNU1902%3BNU1903%3BNU1904"
 )
+
+# The native build keeps its generator choice in CMakeCache.txt. Reusing a tree that
+# was configured with Ninja while this invocation would default to Unix Makefiles
+# aborts with "generator does not match", so pin Ninja whenever it is available —
+# that is also what the earlier successful SDK trees were built with.
+if command -v ninja >/dev/null 2>&1 || command -v ninja-build >/dev/null 2>&1; then
+    BUILD_ARGS+=(-ninja)
+    echo ">>> Using Ninja generator ($(command -v ninja || command -v ninja-build))"
+else
+    echo ">>> Ninja not found; using the default CMake generator"
+fi
 
 echo ">>> Building CoreCLR + libs for $PLATFORM ($ARCH, $BUILD_TYPE)..."
 ./build.sh "${BUILD_ARGS[@]}"
