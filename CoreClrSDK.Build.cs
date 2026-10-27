@@ -49,9 +49,11 @@ public class CoreClrSDK : ModuleRules
 
         if (bMobileCoreClr)
         {
+            // SDK payload layout is <Platform>/<arch>/ (same convention as MonoSDK).
+            // Android is arm64-only; iOS device is arm64-only, simulator rides its own dir.
             string bclSdkDir = Target.Platform == UnrealTargetPlatform.Android
-                ? "Android"
-                : (Target.Architecture == UnrealArch.IOSSimulator ? "IOSSimulator" : "IOS");
+                ? "Android/arm64"
+                : (Target.Architecture == UnrealArch.IOSSimulator ? "IOSSimulator/arm64" : "IOS/arm64");
 
             string contentPakDir = Target.Platform == UnrealTargetPlatform.Android
                 ? "Android"
@@ -90,7 +92,7 @@ public class CoreClrSDK : ModuleRules
 
         if (bMobileCoreClr && Target.Platform == UnrealTargetPlatform.Android)
         {
-            string nativeLibDir = Path.Combine(sdkRoot, "Android", "lib");
+            string nativeLibDir = Path.Combine(sdkRoot, "Android", "arm64", "lib");
 
             string coreclrLibPath = Path.Combine(nativeLibDir, "libcoreclr.so");
             if (File.Exists(coreclrLibPath))
@@ -108,7 +110,7 @@ public class CoreClrSDK : ModuleRules
         if (bMobileCoreClr && Target.Platform == UnrealTargetPlatform.IOS)
         {
             bool bIsSimulator = Target.Architecture == UnrealArch.IOSSimulator;
-            string platformDir = bIsSimulator ? "IOSSimulator" : "IOS";
+            string platformDir = bIsSimulator ? "IOSSimulator/arm64" : "IOS/arm64";
             string nativeLibDir = Path.Combine(sdkRoot, platformDir, "lib");
 
             // iOS requires dynamic libraries in an embedded framework (scatter dylibs
