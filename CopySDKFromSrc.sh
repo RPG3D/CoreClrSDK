@@ -153,8 +153,7 @@ rm -rf "$DEST"
 mkdir -p "$DEST/lib" "$DEST/runtime"
 
 # ── 1. Native runtime engines → lib/ ─────────────────────────────────────────
-# Only what the host loads. mscordaccore/mscordbi are debugger support and are
-# deliberately not copied (they were dead weight in every packaged mobile build).
+# Only what the host loads.
 #
 # Android executes JIT code, so libclrjit is required and the interpreter is optional.
 # iOS forbids JIT (W^X), so libclrinterpreter is required and the JIT is optional.
@@ -181,6 +180,21 @@ for LIB in $REQUIRED_ENGINES $OPTIONAL_ENGINES; do
         exit 1
     else
         echo "  lib${LIB}.${EXT} (not produced for $PLATFORM, skipped)"
+    fi
+done
+
+# ── 1b. Debugger support → lib/ (optional) ───────────────────────────────────
+# mscordaccore/mscordbi back the managed debugging stack (ICorDebug research,
+# -clrdebug). Not required by the host, so copied only when the build produced
+# them; their absence never fails the populate step.
+echo "--- Debugger support (optional) ---"
+for LIB in mscordaccore mscordbi; do
+    SRC="$CORECLR_DIR/lib${LIB}.${EXT}"
+    if [[ -f "$SRC" ]]; then
+        cp "$SRC" "$DEST/lib/"
+        echo "  lib${LIB}.${EXT}"
+    else
+        echo "  lib${LIB}.${EXT} (not produced, skipped)"
     fi
 done
 
