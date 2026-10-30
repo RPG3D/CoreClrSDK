@@ -1,6 +1,20 @@
-DOTNET_MAJOR=10
-DOTNET_TFM=net10.0
-RUNTIME_VERSION=10.0.12
+# ── Runtime version matrix (single source of truth for the CoreCLR payload) ────
+#
+# Rule: the dotnet/runtime branch is a property of the BACKEND, not of the platform.
+#   Mono    -> dotnet 10  (release/10.0): .NET 11 removed Mono from the coreclr tree
+#   CoreCLR -> dotnet 11  (release/11.0): .NET 10's iOS CoreCLR ships no interpreter
+# Managed assemblies stay on net10.0 for both backends: the 11 runtime hosts net10 IL
+# (verified on device, see Docs/rebuild/DOTNET-SDK-UNIFICATION-PLAN.md §4.0).
+# Mono's branch/TFM pins live in MonoSDK (BuildMonoSDK.sh: net10.0-<os>-<type>-<arch>).
+# CoreCLR is dotnet 11 on every platform. Android used to carry a tracked 10.0.12
+# exception (the payload the four-combo matrix was validated on); it was removed on
+# 2026-10-30 after the 11.0.0 payload passed the same B/D device runs.
+# The 10 payload is kept locally as Android/arm64.v006-net10.bak for rollback.
+# CopySDKFromSrc.sh resolves <KEY>_<PLATFORM> before <KEY>; CoreClrSDK.Build.cs reads
+# the same keys and refuses a payload whose VERSION.txt declares a different major.
+DOTNET_MAJOR=11
+DOTNET_TFM=net11.0
+RUNTIME_VERSION=11.0.0
 
 # Subsets the SDK actually consumes. CopySDKFromSrc.sh reads exactly these outputs:
 #   clr.runtime       libcoreclr / libclrjit / libclrinterpreter

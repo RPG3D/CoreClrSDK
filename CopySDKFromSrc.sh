@@ -82,10 +82,36 @@ esac
 
 DEST="$SDK_DIR/$PLATFORM_DIR/$ARCH"
 
-# Pinned TFM — single source of truth: DotNetRuntime.version.
+# Pinned runtime — single source of truth: DotNetRuntime.version.
+# The runtime branch follows the BACKEND (CoreCLR -> 11), so the file's default keys
+# describe CoreCLR. <KEY>_<PLATFORM> exists only for tracked exceptions (Android CLR
+# still on the validated 10.0.12 payload); it is not a general per-platform knob.
 VERSION_FILE="$SDK_DIR/DotNetRuntime.version"
-DOTNET_TFM="$(grep -E '^DOTNET_TFM=' "$VERSION_FILE" | cut -d= -f2- | tr -d '\r')"
-BUILD_SUBSET="$(grep -E '^BUILD_SUBSET=' "$VERSION_FILE" | cut -d= -f2- | tr -d '\r')"
+PLATFORM_UPPER="$(printf '%s' "$PLATFORM" | tr '[:lower:]' '[:upper:]')"
+
+resolve_version_key() { # $1 = KEY
+    local value
+    value="$(grep -E "^$1_${PLATFORM_UPPER}=" "$VERSION_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
+    if [ -z "$value" ]; then
+        value="$(grep -E "^$1=" "$VERSION_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
+    fi
+    printf '%s' "$value"
+}
+
+DOTNET_MAJOR="$(resolve_version_key DOTNET_MAJOR)"
+DOTNET_TFM="$(resolve_version_key DOTNET_TFM)"
+RUNTIME_VERSION="$(resolve_version_key RUNTIME_VERSION)"
+BUILD_SUBSET="$(resolve_version_key BUILD_SUBSET)"
+
+# The payload must come from the branch the version file declares. A release/10.0
+# worktree copied into an iOS slot silently produces a runtime without an interpreter;
+# fail here instead of on the device.
+SRC_MAJOR="$(grep -m1 -oE '<MajorVersion>[0-9]+' "$DOTNET_SRC/eng/Versions.props" 2>/dev/null | grep -oE '[0-9]+' || true)"
+if [[ -n "$SRC_MAJOR" && -n "$DOTNET_MAJOR" && "$SRC_MAJOR" != "$DOTNET_MAJOR" ]]; then
+    echo "Error: $DOTNET_SRC is dotnet $SRC_MAJOR, but DotNetRuntime.version pins $PLATFORM to $DOTNET_MAJOR." >&2
+    echo "       Use the release/$DOTNET_MAJOR.* worktree, or update the version file first." >&2
+    exit 1
+fi
 
 SRC_ARTIFACTS="$DOTNET_SRC/artifacts"
 CORECLR_DIR="$SRC_ARTIFACTS/bin/coreclr/$CORECLR_TRIPLE"
@@ -231,6 +257,7 @@ dotnet/runtime source
   commit: $DOTNET_COMMIT
 
 Platform: $PLATFORM_LABEL
+Runtime: $DOTNET_MAJOR.$RUNTIME_VERSION ($DOTNET_TFM)
 Build type: $BUILD_TYPE
 Build subsets: $BUILD_SUBSET
 EOF

@@ -119,6 +119,13 @@ for DYLIB in "${OTHER_DYLIBS[@]}"; do
     fi
 done
 
+# NOTE: System.Private.CoreLib.dll is deliberately NOT placed here. The runtime looks
+# for it beside its own image (vm/appdomain.cpp: m_BaseLibrary = m_SystemDirectory +
+# g_pwBaseLibrary), and the mobile host answers that lookup from the extracted save dir
+# through the external_assembly_probe contract - the same single mechanism on iOS and
+# Android. CoreLib therefore ships inside the PAK with the rest of the BCL, so it stays
+# hot-updatable and there is exactly one copy to reason about.
+
 # Info.plist (required for dyld validation).
 cat > "$FW_ROOT/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
