@@ -47,8 +47,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Pinned dotnet/runtime tag. Keep in sync with DotNetRuntime.version RUNTIME_VERSION.
-  RUNTIME_TAG: v10.0.12
+  # dotnet/runtime ref resolves from DotNetRuntime.version (SOURCE_TAG) so the version
+  # file stays the single place to move every platform to a new source. The empty env
+  # key below only documents that; jobs grep the file after checkout.
+  RUNTIME_TAG: ""
 
 jobs:
   build-android:
@@ -72,8 +74,14 @@ jobs:
 
       - name: Clone dotnet/runtime
         run: |
+          RUNTIME_TAG="$(grep -E '^SOURCE_TAG=' DotNetRuntime.version | cut -d= -f2- | tr -d '\r')"
+          if [ -z "$RUNTIME_TAG" ]; then
+            echo "SOURCE_TAG missing in DotNetRuntime.version" >&2
+            exit 1
+          fi
+          echo "Pinning dotnet/runtime to $RUNTIME_TAG"
           RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
-          git clone --depth 1 --branch "${{ env.RUNTIME_TAG }}" https://github.com/dotnet/runtime.git dotnet-runtime
+          git clone --depth 1 --branch "$RUNTIME_TAG" https://github.com/dotnet/runtime.git dotnet-runtime
           if [ -n "$RUNTIME_COMMIT" ]; then
             cd dotnet-runtime
             git fetch --depth=100 origin "$RUNTIME_COMMIT"
@@ -102,8 +110,14 @@ jobs:
 
       - name: Clone dotnet/runtime
         run: |
+          RUNTIME_TAG="$(grep -E '^SOURCE_TAG=' DotNetRuntime.version | cut -d= -f2- | tr -d '\r')"
+          if [ -z "$RUNTIME_TAG" ]; then
+            echo "SOURCE_TAG missing in DotNetRuntime.version" >&2
+            exit 1
+          fi
+          echo "Pinning dotnet/runtime to $RUNTIME_TAG"
           RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
-          git clone --depth 1 --branch "${{ env.RUNTIME_TAG }}" https://github.com/dotnet/runtime.git dotnet-runtime
+          git clone --depth 1 --branch "$RUNTIME_TAG" https://github.com/dotnet/runtime.git dotnet-runtime
           if [ -n "$RUNTIME_COMMIT" ]; then
             cd dotnet-runtime
             git fetch --depth=100 origin "$RUNTIME_COMMIT"
@@ -132,8 +146,14 @@ jobs:
 
       - name: Clone dotnet/runtime
         run: |
+          RUNTIME_TAG="$(grep -E '^SOURCE_TAG=' DotNetRuntime.version | cut -d= -f2- | tr -d '\r')"
+          if [ -z "$RUNTIME_TAG" ]; then
+            echo "SOURCE_TAG missing in DotNetRuntime.version" >&2
+            exit 1
+          fi
+          echo "Pinning dotnet/runtime to $RUNTIME_TAG"
           RUNTIME_COMMIT="${{ github.event.inputs.runtime_commit }}"
-          git clone --depth 1 --branch "${{ env.RUNTIME_TAG }}" https://github.com/dotnet/runtime.git dotnet-runtime
+          git clone --depth 1 --branch "$RUNTIME_TAG" https://github.com/dotnet/runtime.git dotnet-runtime
           if [ -n "$RUNTIME_COMMIT" ]; then
             cd dotnet-runtime
             git fetch --depth=100 origin "$RUNTIME_COMMIT"

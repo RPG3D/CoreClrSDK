@@ -13,9 +13,9 @@ on:
   workflow_dispatch:
     inputs:
       runtime_ref:
-        description: 'dotnet/runtime ref (tag, branch or sha) — keep in sync with DotNetRuntime.version'
-        default: 'v11.0.0-rc.1.26425.128'
-        required: true
+        description: 'dotnet/runtime ref (tag, branch or sha) — empty = SOURCE_TAG from DotNetRuntime.version'
+        default: ''
+        required: false
       build_config:
         description: 'Build configuration for the android job'
         default: 'Release'
@@ -35,7 +35,12 @@ jobs:
 
       - name: Checkout dotnet/runtime
         run: |
-          git clone --depth 1 --branch "${{ inputs.runtime_ref }}" \
+          REF="${{ inputs.runtime_ref }}"
+          if [ -z "$REF" ]; then
+            REF="$(grep -E '^SOURCE_TAG=' DotNetRuntime.version | cut -d= -f2- | tr -d '\r')"
+          fi
+          echo "Pinning dotnet/runtime to $REF"
+          git clone --depth 1 --branch "$REF" \
             https://github.com/dotnet/runtime runtime-src
 
       - name: Select Android NDK

@@ -16,6 +16,12 @@ DOTNET_MAJOR=11
 DOTNET_TFM=net11.0
 RUNTIME_VERSION=11.0.0
 
+# The dotnet/runtime ref every build pins to (CI clones it directly; CopySDKFromSrc.sh
+# warns when a local worktree sits elsewhere). Update this one line to move all
+# platforms to a new source. v11.0.0 GA is not tagged yet, so 11 pins the newest RC —
+# switch to the GA tag when it lands.
+SOURCE_TAG=v11.0.0-rc.3.26522.148
+
 # Subsets the SDK actually consumes. CopySDKFromSrc.sh reads exactly these outputs:
 #   clr.runtime       libcoreclr / libclrjit / libclrinterpreter
 #   clr.corelib       pure-IL System.Private.CoreLib.dll (interpreter requirement)

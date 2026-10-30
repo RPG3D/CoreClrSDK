@@ -102,6 +102,7 @@ DOTNET_MAJOR="$(resolve_version_key DOTNET_MAJOR)"
 DOTNET_TFM="$(resolve_version_key DOTNET_TFM)"
 RUNTIME_VERSION="$(resolve_version_key RUNTIME_VERSION)"
 BUILD_SUBSET="$(resolve_version_key BUILD_SUBSET)"
+SOURCE_TAG="$(resolve_version_key SOURCE_TAG)"
 
 # The payload must come from the branch the version file declares. A release/10.0
 # worktree copied into an iOS slot silently produces a runtime without an interpreter;
@@ -111,6 +112,16 @@ if [[ -n "$SRC_MAJOR" && -n "$DOTNET_MAJOR" && "$SRC_MAJOR" != "$DOTNET_MAJOR" ]
     echo "Error: $DOTNET_SRC is dotnet $SRC_MAJOR, but DotNetRuntime.version pins $PLATFORM to $DOTNET_MAJOR." >&2
     echo "       Use the release/$DOTNET_MAJOR.* worktree, or update the version file first." >&2
     exit 1
+fi
+
+# CI builds always sit exactly on SOURCE_TAG; local debugging worktrees are allowed to
+# float, so a mismatch is a warning about provenance, not an error.
+if [[ -n "$SOURCE_TAG" ]]; then
+    SRC_TAG="$(git -C "$DOTNET_SRC" describe --tags --exact-match 2>/dev/null || true)"
+    if [[ -n "$SRC_TAG" && "$SRC_TAG" != "$SOURCE_TAG" ]]; then
+        echo "Warning: $DOTNET_SRC is at tag $SRC_TAG, DotNetRuntime.version pins $SOURCE_TAG." >&2
+        echo "         The payload will carry that worktree's commit, not the pinned one." >&2
+    fi
 fi
 
 SRC_ARTIFACTS="$DOTNET_SRC/artifacts"
@@ -257,7 +268,7 @@ dotnet/runtime source
   commit: $DOTNET_COMMIT
 
 Platform: $PLATFORM_LABEL
-Runtime: $DOTNET_MAJOR.$RUNTIME_VERSION ($DOTNET_TFM)
+Runtime: $RUNTIME_VERSION ($DOTNET_TFM)
 Build type: $BUILD_TYPE
 Build subsets: $BUILD_SUBSET
 EOF

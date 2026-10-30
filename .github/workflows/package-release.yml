@@ -32,7 +32,9 @@ permissions:
 
 env:
   # Informational only: the artifacts already carry their own VERSION.txt.
-  RUNTIME_TAG: v11.0.0-rc.1.26425.128
+  # Resolved per release from DotNetRuntime.version (SOURCE_TAG) by the prepare step;
+  # this env only feeds the release-notes blurb for runs without that step.
+  RUNTIME_TAG: v11.0.0-rc.3.26522.148
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
