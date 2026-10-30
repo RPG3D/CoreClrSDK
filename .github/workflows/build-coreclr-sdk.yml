@@ -58,7 +58,16 @@ jobs:
       - name: Build CoreCLR + libs (android arm64)
         working-directory: runtime-src
         run: |
-          ./build.sh clr.runtime+clr.corelib+clr.nativecorelib+clr.tools+clr.packages+libs \
+          # Same subset BuildCoreClrSDK.sh uses (DotNetRuntime.version BUILD_SUBSET) -
+          # clr.tools/clr.packages would add ~GB of ILCompiler/crossgen2/NuGet packaging
+          # the SDK never consumes.
+          SUBSET="$(grep -E '^BUILD_SUBSET=' "$GITHUB_WORKSPACE/DotNetRuntime.version" | cut -d= -f2- | tr -d '\r')"
+          if [ -z "$SUBSET" ]; then
+            echo "BUILD_SUBSET missing in DotNetRuntime.version" >&2
+            exit 1
+          fi
+          echo "Building subset: $SUBSET"
+          ./build.sh $SUBSET \
             -os android -arch arm64 -c ${{ inputs.build_config }}
 
       - name: Populate SDK (android)

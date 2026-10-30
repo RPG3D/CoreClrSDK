@@ -116,14 +116,15 @@ if [[ "$DOTNET_OS" != "$HOST_OS" || "$ARCH" != "$HOST_ARCH" ]]; then
     rm -f "$RUNTIME_DIR/artifacts/obj/sfx-finish/project.assets.json"
 fi
 
-# ── iOS device: drop the -Static interop install that the graph does not build ──
+# ── Apple-mobile: drop the -Static interop install that the graph does not build ──
 # .NET 11 extended the runtime-component install of libs -Static libraries to iOS
-# device (System.IO.Compression.Native / System.Native / System.Globalization.Native),
-# but those targets are not in the default build graph there, so cmake install fails
-# with FILE_NOT_FOUND. The SDK does not consume them. Idempotent: the pattern is gone
-# after the first run.
-if [[ "$PLATFORM" == "ios" ]]; then
-    echo ">>> Patching libs-native runtime installs for iOS device..."
+# device AND iOS Simulator (System.IO.Compression.Native / System.Native /
+# System.Globalization.Native), but those targets are not in the default build graph
+# there, so cmake install fails with FILE_NOT_FOUND (first hit on CI:
+# iossimulator rc.3, 2026-10-30). The SDK does not consume the -Static outputs.
+# Idempotent: the pattern is gone after the first run.
+if [[ "$PLATFORM" == "ios" || "$PLATFORM" == "iossimulator" ]]; then
+    echo ">>> Patching libs-native runtime installs for $PLATFORM..."
     # The pattern is .NET 11-only; on release/10.0 there is nothing to patch, and
     # `grep` returning 1 would abort this script under `set -o pipefail`.
     PATCHED=$(grep -rl "CLR_CMAKE_HOST_IOS OR " "$RUNTIME_DIR"/src/native/libs/*/CMakeLists.txt 2>/dev/null || true)
