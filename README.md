@@ -1,5 +1,7 @@
 # CoreClrSDK for UnrealSharp
 
+moved to https://github.com/RPG3D/DotNetRuntimeSdk
+
 CoreCLR runtime SDK for [UnrealSharp](https://github.com/RPG3D/UnrealSharp). This repository
 contains build scripts, CI workflows and UBT integration files. Pre-built binaries are
 distributed via [GitHub Releases](https://github.com/RPG3D/CoreClrSDK/releases).
